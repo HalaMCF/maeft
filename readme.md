@@ -1,4 +1,4 @@
-The requirements.txt only provides the basic dependencies to run ABFT. To accelerate the installation process, you may install the corresponding cuda and cudnn on your own. We use cudnn=8.2.1=cuda11.3_0 in the paper.
+The requirements.txt only provides the basic dependencies to run ABFT. To accelerate the generation process, you may install the corresponding cuda and cudnn on your own. We use cudnn=8.2.1=cuda11.3_0 in the paper.
 
 Getting Started as follows:
 
