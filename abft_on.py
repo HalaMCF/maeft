@@ -14,6 +14,12 @@ import math
 from torch.distributions import Categorical
 from collections import deque
 import tensorflow
+from abft_data.census import census_train_data
+from abft_data.credit import credit_train_data
+from abft_data.bank import  bank_train_data
+from abft_data.compas import  compas_train_data
+from abft_data.meps import  meps_train_data
+from sklearn.cluster import KMeans
 tensorflow.compat.v1.disable_eager_execution()
 os.environ["CUDA_VISIBLE_DEVICES"] = "0" 
 
@@ -158,21 +164,51 @@ class DoubleDuelingDQN(object):
                     target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)   
         self.step += 1
 
+def cluster(dataset, cluster_num):
+    #census 0 age 7 race 8 gender credit 8 gender 12 age bank 0 age compas 2 race meps 2 gender
+    data = {"meps": meps_train_data, "census": census_train_data, "credit": credit_train_data, "compas": compas_train_data, "bank": bank_train_data}
+    X, Y, input_shape, nb_classes = data[dataset]()
 
+    kmeans = KMeans(n_clusters=cluster_num)
+    y_pred = kmeans.fit_predict(X)
+    centers = kmeans.cluster_centers_
+    d = []
+    for i in range(cluster_num):
+        temp = kmeans.transform(X)[:, i]
+        d.append(temp)
+    seed = []
+    for i in d:
+        ind = np.argsort(i)[0]
+        seed.append(ind)
+        #print(X[ind].tolist())
+    return seed
+    
 if __name__ == "__main__":
-   
-    for i in range(1):
-        env = gym.make("MyEnv-v0")
-        state_size = env.observation_space.shape[0] 
-        action_size = env.action_space.n 
-        seed = 3407
-        episodes = 200
-        steps = 500
-        state_action = {}
+    episodes = 2002
+    steps = 500
+    cluster_num = 4
+    seed = 3407
+    env = gym.make("MyEnv-v0")
+    state_size = env.observation_space.shape[0] 
+    action_size = env.action_space.n 
+    state_action = {}
+    dataset = "census"
+    start_time = time.time()
+    select_seed = cluster(dataset, cluster_num)
+    this_dict = {}
+    this_dict["all_seed"] = select_seed
+    print(select_seed)
+    for i in range(cluster_num):
+        this_dict["flag"] = 1
+        this_dict['seed'] = select_seed[i]
         agent = DoubleDuelingDQN(state_size, action_size, seed)
-        start_time = time.time()
-        for i_episode in range(episodes):
-            observation, _ = env.reset()
+        if i != cluster_num - 1:
+            this_episodes = int(episodes / cluster_num)
+        else:
+            this_episodes =  episodes - (cluster_num - 1) * int(episodes / cluster_num)
+        for i_episode in range(this_episodes):
+            observation, _ = env.reset(options=this_dict)
+            this_dict["flag"] = 0
             score = 0
             this_loss = 0
             for t in range(steps):
@@ -184,6 +220,6 @@ if __name__ == "__main__":
                 agent.train(state_action)
                 score += reward
                 this_loss += agent.loss
-         
-        end_time = time.time()
-        print(end_time - start_time)
+       
+    end_time = time.time()
+    print(end_time - start_time) 

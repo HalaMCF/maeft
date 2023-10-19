@@ -4,11 +4,11 @@ import os
 from abft_model.dnn_models import dnn
 os.chdir("./")
 import sys
-from abft_data.census import census_test_data
-from abft_data.credit import credit_test_data
-from abft_data.bank import  bank_test_data
-from abft_data.compas import  compas_test_data
-from abft_data.meps import  meps_test_data
+from abft_data.census import census_train_data
+from abft_data.credit import credit_train_data
+from abft_data.bank import  bank_train_data
+from abft_data.compas import  compas_train_data
+from abft_data.meps import  meps_train_data
 sys.path.append('../')
 import copy
 import tensorflow as tf
@@ -16,17 +16,18 @@ tf.compat.v1.disable_eager_execution()
 from utils.config import census, credit, bank, compas, meps
 import numpy as np
 from utils.utils_tf import model_argmax
+from scipy.stats import kruskal, ks_2samp
 reward_biasd = 1.5
 reward_punished = -0.015
 # prepare testing data 
 #census 0 age 7 race 8 gender credit 8 gender 12 age bank 0 age compas 2 race meps 2 gender
-data = {"meps": meps_test_data, "census": census_test_data, "credit": credit_test_data, "compas": compas_test_data, "bank": bank_test_data}
+data = {"meps": meps_train_data, "census": census_train_data, "credit": credit_train_data, "compas": compas_train_data, "bank": bank_train_data}
 data_config = {"census":census, "credit":credit, "bank":bank, "compas": compas, "meps": meps}
-dataset = "compas"
+dataset = "census"
 to_check_config = data_config[dataset]
 params = to_check_config.params
 all_params = to_check_config.categorical_features
-protected_params = [2]
+protected_params = [0]
 low_bound = to_check_config.input_bounds[protected_params[0]][0]
 high_bound = to_check_config.input_bounds[protected_params[0]][1] + 1 
 array_length = high_bound - low_bound
@@ -41,7 +42,6 @@ for i in list(set(all_params) - set(protected_params)):
     else: 
         action_table.append([i,1])
         action_table.append([i,-1])
-print(len(action_table))
 
 X, Y, input_shape, nb_classes = data[dataset]()
 model = dnn(input_shape, nb_classes)
@@ -99,6 +99,12 @@ class MyEnv(gym.Env):
         self.dict = {}
         self.obs = []
         self.judge = 0
+        self.seed = []
+        self.seed_1 = []
+        self.seed_2 = []
+        self.seed_3 = []
+        self.seed_4 = []
+        self.this_seed = []
 
     def step(self,action):
         reward = 0
@@ -157,19 +163,23 @@ class MyEnv(gym.Env):
         self.observation_space = np.array(self.current_sample)
         self.counts += 1
         self.total += 1
-        
+        #p = ks_2samp(self.this_seed, self.current_sample).pvalue
+        p = 1
+        #stat, p = kruskal(self.seed_1, self.seed_2, self.seed_3, self.seed_4, self.current_sample)
         if reward != reward_biasd:
             reward = reward_punished
+        else:
+            reward *= p
         truncated = False
         if self.counts == self.episode_end:
             truncated = True
      
-        if self.total % 100000 == 0:
+        if self.total % 1001000 == 0:
             print("The number of biased instances")
             print(self.biasd, self.dup_error)
             print("The number of total generate instances:")
             print(len(self.total_set))  
-        if self.total % 100000 == 0:
+        if self.total % 1001000 == 0:
             self.error_set = list(self.error_set)
             self.total_set = list(self.total_set) 
             self.kmeans_set = list(self.kmeans_set)
@@ -179,18 +189,17 @@ class MyEnv(gym.Env):
         return self.observation_space, reward, terminated, truncated, self.dict
             
 
-    def reset(self):
-        self.current_sample = X[1203].tolist()
-        #print(self.current_sample)
-        #meps
-        #2272    2959-3360
-        #compas
-        #1203   1443 
-        #bank
-        #4808
-        #credit
-        #35
-        #census
-        #894
+    def reset(self, options):
+        #print(options)
+        if options["flag"] == 1:
+            self.dict = {}
+        self.current_sample = X[options["seed"]].tolist()
+        self.this_seed = copy.deepcopy(self.current_sample)
+        #print(1,self.current_sample)
+        self.seed = options["all_seed"]
+        self.seed_1 = X[self.seed[0]].tolist()
+        self.seed_2 = X[self.seed[1]].tolist()
+        self.seed_3 = X[self.seed[2]].tolist()
+        self.seed_4 = X[self.seed[3]].tolist()
         self.observation_space = np.array(self.current_sample)
         return self.observation_space, {}
