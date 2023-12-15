@@ -8,3 +8,7 @@ Getting Started as follows:
 then you can get the details of the test generation process and the whole IDIs.npy.
 
 You can get more information about training DNNs from Neuronfair and LIMI based on tensorflow 1.0 or you can train your own model. The datasets and models used in the paper are provided in this repository. 
+
+
+
+The results of the performance of MABFT on machine learning models is shown in experiments_ml.xlsx.
