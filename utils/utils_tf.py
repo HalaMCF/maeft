@@ -288,3 +288,11 @@ def model_prediction(sess, x, predictions, samples, feed=None, batch_size=128):
         for i in range(start,end):
             pros_all[i]=pros[i-start]
     return pros_all
+
+def predict_prob(sess, x, predictions, samples, feed=None):
+    feed_dict = {x: samples}
+    if feed is not None:
+        feed_dict.update(feed)
+    probabilities = sess.run(predictions, feed_dict)
+    # print(probabilities)
+    return probabilities

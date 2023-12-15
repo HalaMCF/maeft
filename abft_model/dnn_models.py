@@ -13,6 +13,7 @@ def dnn(input_shape=(None, 13), nb_classes=2):
               Linear(64),
               activation(),
               Linear(32),
+              Dropout(0),
               activation(),
               Linear(16),
               activation(),

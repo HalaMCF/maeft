@@ -16,18 +16,19 @@ tf.compat.v1.disable_eager_execution()
 from utils.config import census, credit, bank, compas, meps
 import numpy as np
 from utils.utils_tf import model_argmax
-from scipy.stats import kruskal, ks_2samp
+from scipy.spatial import distance
+import math
 reward_biasd = 1.5
 reward_punished = -0.015
 # prepare testing data 
 #census 0 age 7 race 8 gender credit 8 gender 12 age bank 0 age compas 2 race meps 2 gender
 data = {"meps": meps_train_data, "census": census_train_data, "credit": credit_train_data, "compas": compas_train_data, "bank": bank_train_data}
 data_config = {"census":census, "credit":credit, "bank":bank, "compas": compas, "meps": meps}
-dataset = "census"
+dataset = "meps"
 to_check_config = data_config[dataset]
 params = to_check_config.params
 all_params = to_check_config.categorical_features
-protected_params = [0]
+protected_params = [2]
 low_bound = to_check_config.input_bounds[protected_params[0]][0]
 high_bound = to_check_config.input_bounds[protected_params[0]][1] + 1 
 array_length = high_bound - low_bound
@@ -43,6 +44,7 @@ for i in list(set(all_params) - set(protected_params)):
         action_table.append([i,1])
         action_table.append([i,-1])
 
+tf.compat.v1.reset_default_graph()
 X, Y, input_shape, nb_classes = data[dataset]()
 model = dnn(input_shape, nb_classes)
 x = tf.compat.v1.placeholder(tf.float32, shape=input_shape)
@@ -53,29 +55,18 @@ config = tf.compat.v1.ConfigProto()
 config.gpu_options.per_process_gpu_memory_fraction = 1
 sess = tf.compat.v1.Session(config=config)
 saver = tf.compat.v1.train.Saver()
-model_path = "./our_models/{}/dnn/best.model".format(dataset)
+model_path = "./new_dropout/{}/dnn/best.model".format(dataset)
 saver.restore(sess, model_path)
 
 def check_for_error_condition(sess, x, preds, t, sens, length):
-    """
-    Check whether the test case is an individual discriminatory instance
-    :param conf: the configuration of dataset
-    :param sess: TF session
-    :param x: input placeholder
-    :param preds: the model's symbolic output
-    :param t: test case
-    :param sens: the index of sensitive feature
-    :return: whether it is an individual discriminatory instance
-    """
+    t = np.insert(t, sens, low_bound) 
     t = np.array([t])
     to_check = np.repeat(t, length, axis=0)
     temp = 0
     for i in range(low_bound, high_bound):
         to_check[temp][sens] = i
         temp += 1
-    #print(to_check)
     result = model_argmax(sess, x, preds, np.vstack(to_check))
-    #print(result, np.unique(result))
     if len(np.unique(result)) != 1:
         return True
     return False
@@ -88,7 +79,7 @@ class MyEnv(gym.Env):
         self.current_sample = []
         self.episode_end = 500
         self.counts = 0
-        self.observation_space = spaces.Box(low=0,high=184,shape=(params,1))
+        self.observation_space = spaces.Box(low=0,high=184,shape=(params - len(protected_params),1))
         self.fairness = 0
         self.biasd = 0
         self.error_set = set()
@@ -99,29 +90,32 @@ class MyEnv(gym.Env):
         self.dict = {}
         self.obs = []
         self.judge = 0
-        self.seed = []
-        self.seed_1 = []
-        self.seed_2 = []
-        self.seed_3 = []
-        self.seed_4 = []
         self.this_seed = []
+        self.mean = 0
+        self.covariance = []
+        self.threshold = 0
+        self.median = 0
 
     def step(self,action):
         reward = 0
+            
         index = action_table[action][0]
         change = action_table[action][1]
-        
+   
         range1 = to_check_config.input_bounds[index]
         
         #calculate st_act
         to_check = tuple(copy.deepcopy(self.current_sample))
+
         if to_check in self.dict.keys():
             self.dict[to_check][0][action] += 1
         else:
             self.dict[to_check] = np.zeros([1, len(action_table)] , dtype=np.int32)
             self.dict[to_check][0][action] = 1
         
-        
+        if index > protected_params[0]:
+            index = index - 1
+             
         if self.current_sample[index] == range1[0] or self.current_sample[index] == range1[1]:
             if self.current_sample[index] == range1[0]:
                 change = 1
@@ -131,7 +125,7 @@ class MyEnv(gym.Env):
                 self.current_sample[index] -= 1  
         else:
             self.current_sample[index] += change
-        
+
         #calculate another st_act
         to_check_second = tuple(copy.deepcopy(self.current_sample))
         if to_check_second in self.dict.keys():
@@ -148,28 +142,33 @@ class MyEnv(gym.Env):
                 
         terminated = False
         x_ = copy.deepcopy(self.current_sample)
+        
         if tuple(x_) in self.total_set:
             if tuple(x_) in self.error_set:
                 self.dup_error += 1
         else:
             self.total_set.add(tuple(x_))
             is_discriminate = check_for_error_condition(sess,x,preds,self.current_sample,protected_params[0], array_length)
-            if is_discriminate == True:
+            if is_discriminate:
                 reward = reward_biasd
                 self.biasd += 1
                 self.error_set.add(tuple(x_))
-            else:
-                self.fairness += 1
+
+                
         self.observation_space = np.array(self.current_sample)
         self.counts += 1
         self.total += 1
-        #p = ks_2samp(self.this_seed, self.current_sample).pvalue
-        p = 1
-        #stat, p = kruskal(self.seed_1, self.seed_2, self.seed_3, self.seed_4, self.current_sample)
-        if reward != reward_biasd:
+        
+        if reward == 0:
             reward = reward_punished
         else:
-            reward *= p
+            mahalanobis_dist = distance.mahalanobis(self.current_sample, self.mean, self.covariance)
+            if mahalanobis_dist <= self.median:
+                reward = reward_biasd 
+            elif mahalanobis_dist > self.median and mahalanobis_dist <= self.threshold:
+                reward = reward_biasd / (math.sqrt(mahalanobis_dist / self.median))
+            else:
+                reward = reward_biasd /  (mahalanobis_dist / self.median)
         truncated = False
         if self.counts == self.episode_end:
             truncated = True
@@ -183,23 +182,18 @@ class MyEnv(gym.Env):
             self.error_set = list(self.error_set)
             self.total_set = list(self.total_set) 
             self.kmeans_set = list(self.kmeans_set)
-            np.save("{}.npy".format(self.biasd), self.error_set)  
-            
+            np.save("{}.npy".format(self.biasd), self.error_set) 
 
         return self.observation_space, reward, terminated, truncated, self.dict
             
 
     def reset(self, options):
-        #print(options)
-        if options["flag"] == 1:
-            self.dict = {}
         self.current_sample = X[options["seed"]].tolist()
+        self.current_sample = self.current_sample[:protected_params[0]] + self.current_sample[protected_params[0] + 1:]
         self.this_seed = copy.deepcopy(self.current_sample)
-        #print(1,self.current_sample)
-        self.seed = options["all_seed"]
-        self.seed_1 = X[self.seed[0]].tolist()
-        self.seed_2 = X[self.seed[1]].tolist()
-        self.seed_3 = X[self.seed[2]].tolist()
-        self.seed_4 = X[self.seed[3]].tolist()
+        self.mean = options["mean"]
+        self.covariance = options["covariance"]
+        self.threshold = options["threshold"]
+        self.median = options["median"]
         self.observation_space = np.array(self.current_sample)
         return self.observation_space, {}

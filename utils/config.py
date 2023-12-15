@@ -20,7 +20,7 @@ class census:
     input_bounds.append([0, 99]) # capital_gain
     input_bounds.append([0, 39]) # capital_loss
     input_bounds.append([0, 99]) # hours_per_week
-    input_bounds.append([0, 39]) # native_country
+    input_bounds.append([0, 40]) # native_country
     protected_params = [0, 7, 8]
     input_bounds_size=[]
     for x in input_bounds:
