@@ -1,9 +1,9 @@
-The requirements.txt only provides the basic dependencies to run ABFT. To accelerate the generation process, you may install the corresponding cuda and cudnn on your own. We use cudnn=8.2.1=cuda11.3_0 in the paper.
+The requirements.txt only provides the basic dependencies to run MABFT. To accelerate the generation process, you may install the corresponding cuda and cudnn on your own. We use cudnn=8.2.1=cuda11.3_0 in the paper.
 
 Getting Started as follows:
 
 1. pip install requirements.txt
-2. python abft_on.py
+2. python mabft.py
 
 then you can get the details of the test generation process and the whole IDIs.npy.
 

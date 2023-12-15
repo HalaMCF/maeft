@@ -1,5 +1,5 @@
-from abft_model.network import *
-from abft_model.layer import *
+from mabft_model.network import *
+from mabft_model.layer import *
 
 def dnn(input_shape=(None, 13), nb_classes=2):
     """

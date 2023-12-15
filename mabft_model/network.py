@@ -1,5 +1,5 @@
-from abft_model.model import Model
-from abft_model.layer import *
+from mabft_model.model import Model
+from mabft_model.layer import *
 
 class MLP(Model):
     """

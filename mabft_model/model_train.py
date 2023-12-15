@@ -5,12 +5,12 @@ import sys
 # sys.path.append("../")
 import tensorflow as tf
 from tensorflow.python.platform import flags
-from abft_data.census import census_data
-from abft_data.bank import bank_data
-from abft_data.credit import credit_data
-from abft_data.compas import compas_data
+from mabft_data.census import census_data
+from mabft_data.bank import bank_data
+from mabft_data.credit import credit_data
+from mabft_data.compas import compas_data
 from utils.utils_tf import model_train, model_eval
-from abft_model.dnn_models import dnn
+from mabft_model.dnn_models import dnn
 os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 FLAGS = flags.FLAGS
 

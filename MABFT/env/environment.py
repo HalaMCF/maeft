@@ -1,29 +1,30 @@
 from gym import spaces
 import gym
 import os 
+from mabft_model.dnn_models import dnn
 os.chdir("./")
 import sys
-from abft_data.census import census_train_data
-from abft_data.credit import credit_train_data
-from abft_data.bank import  bank_train_data
-from abft_data.compas import  compas_train_data
-from abft_data.meps import  meps_train_data
+from mabft_data.census import census_train_data
+from mabft_data.credit import credit_train_data
+from mabft_data.bank import  bank_train_data
+from mabft_data.compas import  compas_train_data
+from mabft_data.meps import  meps_train_data
 sys.path.append('../')
 import copy
 import tensorflow as tf
 tf.compat.v1.disable_eager_execution()
 from utils.config import census, credit, bank, compas, meps
 import numpy as np
+from utils.utils_tf import model_argmax
 from scipy.spatial import distance
 import math
-import joblib
 reward_biasd = 1.5
 reward_punished = -0.015
 # prepare testing data 
 #census 0 age 7 race 8 gender credit 8 gender 12 age bank 0 age compas 2 race meps 2 gender
 data = {"meps": meps_train_data, "census": census_train_data, "credit": credit_train_data, "compas": compas_train_data, "bank": bank_train_data}
 data_config = {"census":census, "credit":credit, "bank":bank, "compas": compas, "meps": meps}
-dataset = "compas"
+dataset = "meps"
 to_check_config = data_config[dataset]
 params = to_check_config.params
 all_params = to_check_config.categorical_features
@@ -40,27 +41,35 @@ for i in list(set(all_params) - set(protected_params)):
             action_table.append([i,1])
             action_table.append([i,-1])
     else: 
-        if i > protected_params[0]:
-            i -= 1
         action_table.append([i,1])
         action_table.append([i,-1])
 
 tf.compat.v1.reset_default_graph()
 X, Y, input_shape, nb_classes = data[dataset]()
-clf = joblib.load(os.path.join('./ml_models/compas_svm.pkl'))
+model = dnn(input_shape, nb_classes)
+x = tf.compat.v1.placeholder(tf.float32, shape=input_shape)
+y = tf.compat.v1.placeholder(tf.float32, shape=(None, nb_classes))
+preds = model(x)
+tf.compat.v1.set_random_seed(1234)
+config = tf.compat.v1.ConfigProto()
+config.gpu_options.per_process_gpu_memory_fraction = 1
+sess = tf.compat.v1.Session(config=config)
+saver = tf.compat.v1.train.Saver()
+model_path = "./new_dropout/{}/dnn/best.model".format(dataset)
+saver.restore(sess, model_path)
 
-def check_for_error_condition(clf, t, sens, length):
-        t = np.insert(t, sens, low_bound) 
-        t = np.array([t])
-        to_check = np.repeat(t, length, axis=0)
-        temp = 0
-        for i in range(low_bound, high_bound):
-            to_check[temp][sens] = i
-            temp += 1
-        result = clf.predict(np.vstack(to_check))
-        if len(np.unique(result)) != 1:
-            return True
-        return False
+def check_for_error_condition(sess, x, preds, t, sens, length):
+    t = np.insert(t, sens, low_bound) 
+    t = np.array([t])
+    to_check = np.repeat(t, length, axis=0)
+    temp = 0
+    for i in range(low_bound, high_bound):
+        to_check[temp][sens] = i
+        temp += 1
+    result = model_argmax(sess, x, preds, np.vstack(to_check))
+    if len(np.unique(result)) != 1:
+        return True
+    return False
 
                 
 
@@ -89,20 +98,24 @@ class MyEnv(gym.Env):
 
     def step(self,action):
         reward = 0
+            
         index = action_table[action][0]
         change = action_table[action][1]
-        
+   
         range1 = to_check_config.input_bounds[index]
         
         #calculate st_act
         to_check = tuple(copy.deepcopy(self.current_sample))
+
         if to_check in self.dict.keys():
             self.dict[to_check][0][action] += 1
         else:
             self.dict[to_check] = np.zeros([1, len(action_table)] , dtype=np.int32)
             self.dict[to_check][0][action] = 1
         
-        
+        if index > protected_params[0]:
+            index = index - 1
+             
         if self.current_sample[index] == range1[0] or self.current_sample[index] == range1[1]:
             if self.current_sample[index] == range1[0]:
                 change = 1
@@ -112,7 +125,7 @@ class MyEnv(gym.Env):
                 self.current_sample[index] -= 1  
         else:
             self.current_sample[index] += change
-        
+
         #calculate another st_act
         to_check_second = tuple(copy.deepcopy(self.current_sample))
         if to_check_second in self.dict.keys():
@@ -135,11 +148,12 @@ class MyEnv(gym.Env):
                 self.dup_error += 1
         else:
             self.total_set.add(tuple(x_))
-            is_discriminate = check_for_error_condition(clf,self.current_sample,protected_params[0], array_length)
+            is_discriminate = check_for_error_condition(sess,x,preds,self.current_sample,protected_params[0], array_length)
             if is_discriminate:
                 reward = reward_biasd
                 self.biasd += 1
                 self.error_set.add(tuple(x_))
+
                 
         self.observation_space = np.array(self.current_sample)
         self.counts += 1
@@ -168,7 +182,7 @@ class MyEnv(gym.Env):
             self.error_set = list(self.error_set)
             self.total_set = list(self.total_set) 
             self.kmeans_set = list(self.kmeans_set)
-            np.save("{}.npy".format(self.biasd), self.error_set)
+            np.save("{}.npy".format(self.biasd), self.error_set) 
 
         return self.observation_space, reward, terminated, truncated, self.dict
             

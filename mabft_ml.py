@@ -5,7 +5,7 @@ import torch.nn.functional as F
 import gym
 import numpy as np
 import sys
-import ABFT_ml
+import MABFT_ml
 import matplotlib.pyplot as plt
 import time
 import os
@@ -13,11 +13,11 @@ import random
 import math
 from torch.distributions import Categorical
 from collections import deque
-from abft_data.census import census_train_data
-from abft_data.credit import credit_train_data
-from abft_data.bank import  bank_train_data
-from abft_data.compas import  compas_train_data
-from abft_data.meps import  meps_train_data
+from mabft_data.census import census_train_data
+from mabft_data.credit import credit_train_data
+from mabft_data.bank import  bank_train_data
+from mabft_data.compas import  compas_train_data
+from mabft_data.meps import  meps_train_data
 from scipy.spatial import distance
 from sklearn.cluster import KMeans
 from utils.config import census, credit, bank, compas, meps
