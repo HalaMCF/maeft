@@ -24,11 +24,11 @@ reward_punished = -0.015
 #census 0 age 7 race 8 gender credit 8 gender 12 age bank 0 age compas 2 race meps 2 gender
 data = {"meps": meps_train_data, "census": census_train_data, "credit": credit_train_data, "compas": compas_train_data, "bank": bank_train_data}
 data_config = {"census":census, "credit":credit, "bank":bank, "compas": compas, "meps": meps}
-dataset = "meps"
+dataset = "credit"
 to_check_config = data_config[dataset]
 params = to_check_config.params
 all_params = to_check_config.categorical_features
-protected_params = [2]
+protected_params = [12]
 low_bound = to_check_config.input_bounds[protected_params[0]][0]
 high_bound = to_check_config.input_bounds[protected_params[0]][1] + 1 
 array_length = high_bound - low_bound

@@ -11,4 +11,4 @@ You can get more information about training DNNs from Neuronfair and LIMI based 
 
 
 
-The results of the performance of MABFT on machine learning models is shown in experiments_ml.xlsx.
+The results of the performance of MABFT on machine learning models is shown in experiments_ml.xlsx. （Note that we train 5 different models on the datasets including Random Forest, Support Vector Machine and Logistic Regression models Naive Bayes models and K-NearestNeighbor models, and choose the model with the best performance）
