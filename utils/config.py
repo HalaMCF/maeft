@@ -1,12 +1,7 @@
 class census:
-    """
-    Configuration of dataset Census Income
-    """
-
-    # the size of total features
+ 
     params = 13
 
-    # the valid religion of each feature
     input_bounds = []
     input_bounds.append([1, 9]) # age
     input_bounds.append([0, 7]) # workclass
@@ -33,7 +28,7 @@ class census:
     class_name = ["low", "high"]
 
     # specify the categorical features with their indices
-    categorical_features = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+    all_param = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 
 class credit:
     """
@@ -74,9 +69,8 @@ class credit:
 
     # the name of each class
     class_name = ["bad", "good"]
-
-    # specify the categorical features with their indices
-    categorical_features = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,17, 18, 19]
+    
+    all_param = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,17, 18, 19]
 
 class bank:
     """
@@ -101,7 +95,7 @@ class bank:
     input_bounds.append([0, 11])
     input_bounds.append([0, 99])
     input_bounds.append([1, 63])
-    input_bounds.append([-1, 39])
+    input_bounds.append([0, 1])
     input_bounds.append([0, 1])
     input_bounds.append([0, 3])
     protected_params = [0]
@@ -112,46 +106,11 @@ class bank:
     # the name of each class
     class_name = ["no", "yes"]
 
-    # specify the categorical features with their indices
-    categorical_features = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    all_param = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 
-class compas:
-    """
-    Configuration of dataset Bank Marketing
-    """
-    from aif360.datasets.compas_dataset import CompasDataset
-    import numpy as np
-    cd = CompasDataset()
-
-    # the size of total features
-    params = len(cd.features[0])
-
-    # the valid religion of each feature
-    input_bounds = []
-    categorical_features = []
-    for i in range(params):
-        input_bounds.append([int(np.min(cd.features[:,i])),int(np.max(cd.features[:,i]))])
-        categorical_features.append(i)
-    #0 sex 1 age 2 race
-    protected_params = [0, 1, 2]
-    # the name of each feature
-    feature_name = cd.feature_names
-
-    # the name of each class
-    class_name = ["no", "yes"]
-
-    # specify the categorical features with their indices
-    # categorical_features = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
 
 class meps:
-    """
-    Configuration of dataset Bank Marketing
-    """
-
-    # the size of total features
     params = 40
-
-    # the valid religion of each feature
     input_bounds = [
         [0, 3],
         [0, 85],
@@ -238,12 +197,154 @@ class meps:
         'INSCOV',
     ]
 
-    protected_params = [1, 2, 3]
+    protected_params = [0, 1, 2]
     # the name of each class
     class_name = ["no", "yes"]
     
-    # specify the categorical features with their indices
-    categorical_features = []
+    all_param = []
     for i in range(params):
-        categorical_features.append(i)
+        all_param.append(i)
 
+class ricci:
+    """
+    Configuration of dataset Bank Marketing
+    """
+
+    # the size of total features
+    params = 5
+
+    # the valid religion of each feature
+    input_bounds = []
+    input_bounds.append([0, 1])
+    input_bounds.append([40, 92])
+    input_bounds.append([46, 95])
+    input_bounds.append([0, 2])  # race
+    input_bounds.append([45, 92])
+    protected_params = [3]
+    
+    all_param = []
+    for i in range(params):
+        all_param.append(i)
+    
+
+class tae:
+    params = 5
+    input_bounds = []
+    input_bounds.append([1, 2])   #whether_is_native_or_not
+    input_bounds.append([1, 25])
+    input_bounds.append([1, 26])
+    input_bounds.append([1, 2])
+    input_bounds.append([3, 66])
+    protected_params = [0]
+    
+    all_param = []
+    for i in range(params):
+        all_param.append(i)
+
+class student_math:
+    params = 32
+    input_bounds = []
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([15, 22])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 4])
+    input_bounds.append([0, 4])
+    input_bounds.append([0, 4])
+    input_bounds.append([0, 4])
+    input_bounds.append([0, 3])
+    input_bounds.append([0, 2])
+    input_bounds.append([1, 4])
+    input_bounds.append([1, 4])
+    input_bounds.append([0, 3])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([1, 5])
+    input_bounds.append([1, 5])
+    input_bounds.append([1, 5])
+    input_bounds.append([1, 5])
+    input_bounds.append([1, 5])
+    input_bounds.append([1, 5])
+    input_bounds.append([0, 75])
+    input_bounds.append([3, 19])
+    input_bounds.append([0, 19])
+    protected_params = [0]
+    
+    all_param = []
+    for i in range(params):
+        all_param.append(i)
+
+class student_por:
+    params = 32
+    input_bounds = []
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])        #sex
+    input_bounds.append([15, 22])      #age
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 4])
+    input_bounds.append([0, 4])
+    input_bounds.append([0, 4])
+    input_bounds.append([0, 4])
+    input_bounds.append([0, 3])
+    input_bounds.append([0, 2])
+    input_bounds.append([1, 4])
+    input_bounds.append([1, 4])
+    input_bounds.append([0, 3])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 1])
+    input_bounds.append([1, 5])
+    input_bounds.append([1, 5])
+    input_bounds.append([1, 5])
+    input_bounds.append([1, 5])
+    input_bounds.append([1, 5])
+    input_bounds.append([1, 5])
+    input_bounds.append([0, 32])
+    input_bounds.append([0, 19])
+    input_bounds.append([0, 19])
+    protected_params = [0]
+    
+    all_param = []
+    for i in range(params):
+        all_param.append(i)
+
+
+class compas:
+    params = 16
+    input_bounds = []
+    input_bounds.append([0, 1])
+    input_bounds.append([18, 96])
+    input_bounds.append([0, 2])
+    input_bounds.append([0, 5])    #race
+    input_bounds.append([0, 20])
+    input_bounds.append([0, 13])
+    input_bounds.append([0, 11])
+    input_bounds.append([0, 43])
+    input_bounds.append([-29, 52])
+    input_bounds.append([0, 94])
+    input_bounds.append([0, 12])
+    input_bounds.append([0, 9])
+    input_bounds.append([0, 2])
+    input_bounds.append([0, 9])
+    input_bounds.append([0, 2])
+    input_bounds.append([0, 11])
+    protected_params = [3]
+    
+    all_param = []
+    for i in range(params):
+        all_param.append(i)
