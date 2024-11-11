@@ -80,8 +80,6 @@ elif model_struct == 'ft':
         n_c = [0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0]
     elif dataset == "math" or dataset == "por":
         n_c = [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]
-    elif dataset == "insurance":
-        n_c = [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0]
     x_cont = []
     x_cat = []
     for i in X:

@@ -30,10 +30,9 @@ import pandas as pd
 warnings.filterwarnings("ignore")
 
 task_type = "binclass"
+dataset = sys.argv[1]
+method = sys.argv[2]
 
-
-dataset = 'credit'
-method = 'maeft'
 
 if dataset == 'ricci' or dataset == 'credit' or dataset == 'tae':
     batch = 32          

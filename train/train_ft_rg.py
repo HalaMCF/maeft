@@ -22,13 +22,11 @@ data_test = {"math": math_test_data, "por":por_test_data}
 data_val = {"math": math_val_data, "por":por_val_data}
 data_config = {"math": student_math, "por": student_por}
 
-dataset = "insurance"
+dataset = "math"
 task_type = "regression"
 this_config = data_config[dataset].input_bounds
 if dataset == "math" or dataset == "por":
     n_c = [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]
-elif dataset == "insurance":
-    n_c = [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0]
 
 X_train, Y_train, input_shape, nb_classes = data[dataset]()
 d_out = 1 

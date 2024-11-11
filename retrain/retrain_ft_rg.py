@@ -24,7 +24,7 @@ import sys
 dataset = sys.argv[1]
 method = sys.argv[2]
 task_type = "regression"
-batch_size = 32    #ricci tae 8 credit math 32 meps 256 
+batch_size = 32    
 sample = 1
 protected_params = [2]
 data_config = {"math": student_math, "por": student_por}
@@ -48,8 +48,6 @@ try:
 
     if dataset == "math" or dataset == "por":
         n_c = [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]
-    elif dataset == "insurance":
-        n_c = [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0]
         
     X_train, Y_train, input_shape, nb_classes = data[dataset]()
     X_test, Y_test, input_shape, nb_classes = data_test[dataset]()

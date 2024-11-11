@@ -16,7 +16,7 @@ dataset = sys.argv[1]
 method = sys.argv[2]
 """ dataset = 'math'
 method = 'rmaeft'  """
-batch = 32                    #ricci 16 credit 32
+batch = 32                   
 sample = 1
 protected_params = [2]
 data_config = {"census":census, "credit":credit, "bank":bank, "compas": compas, "meps": meps, "tae": tae, "ricci": ricci, "math": student_math, "por": student_por}
@@ -61,23 +61,6 @@ try:
     to_x = min(1 * len(X_train), to_add_length)
     #to_x = int(sample * len(to_add))
     idx = random.sample(range(0, len(to_add)), to_x) 
-        
-    remaining_indices = list(set(range(to_add_length)) - set(idx))
-    if len(remaining_indices) != 0:
-        remaining_elements = [to_add[i] for i in remaining_indices]
-        to_x_valid = min(1 * len(X_val), len(remaining_indices))
-        idx_valid = random.sample(range(0, len(remaining_elements)), to_x_valid) 
-        x_add_v = []
-        y_add_v = []
-
-        for i in idx_valid:
-            x_add_v.append(remaining_elements[i][:-1])
-            y_add_v.append(remaining_elements[i][-1])  
-
-        X_val = np.append(X_val, x_add_v, axis=0)
-        Y_val = np.append(Y_val, y_add_v, axis=0) 
-
-
         
     X_test_length = len(X_val)
     x_add = []

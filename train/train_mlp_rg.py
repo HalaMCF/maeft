@@ -58,7 +58,7 @@ def objective(trial):
     # 超参数：优化器
     optimizer_name = trial.suggest_categorical("optimizer", ["Adam", "RMSprop", "SGD"])
     
-    dataset = "insurance"
+    dataset = "math"
       
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     data = {"math": math_train_data, "por": por_train_data}

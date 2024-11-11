@@ -213,8 +213,6 @@ class k_cluster:
                 self.n_c = [0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0]
             elif self.dataset == "math" or self.dataset == "por":
                 self.n_c = [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]
-            elif self.dataset == "insurance":
-                self.n_c = [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0]
         self.k = 0.08
     
     def mlp_check_for_error_condition(self, t, sens, length):

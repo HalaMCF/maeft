@@ -21,12 +21,12 @@ import pandas as pd
 import copy
 import sys
 warnings.filterwarnings("ignore")
-""" dataset = sys.argv[1]
-method = sys.argv[2] """
-dataset = 'ricci'
-method = 'maeft'
+dataset = sys.argv[1]
+method = sys.argv[2]
+""" dataset = 'ricci'
+method = 'maeft' """
 if dataset == 'ricci' or dataset == 'credit':
-    batch = 32                #ricci credit 32
+    batch = 32             
 else:
     batch = 256
     
@@ -67,17 +67,8 @@ def check_for_error_condition(t, sens, length):
         return True
     return False
 
-def monte_carlo_dropout_predict(x, model, num_samples=10):
-    model.train()
-    x = torch.tensor(x, dtype=torch.float).to(device)
-    predictions = []
-    for _ in range(num_samples):
-        with torch.no_grad():
-            predictions.append(model(x))
-    predictions = torch.stack(predictions)
-    return torch.max(predictions.std(dim=0), dim=1)
-        
 
+    
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 data = {"census":census_train_data, "credit": credit_train_data, "bank": bank_train_data, "meps": meps_train_data, "tae": tae_train_data, "ricci": ricci_train_data,  "math": math_train_data, "compas": compas_train_data}
 data_test = {"census":census_test_data, "credit": credit_test_data, "bank": bank_test_data, "meps": meps_test_data, "tae": tae_test_data, "ricci": ricci_test_data, "math": math_test_data, "compas": compas_test_data}
