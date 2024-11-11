@@ -13,20 +13,28 @@ import random
 import math
 from torch.distributions import Categorical
 from collections import deque
-from maeft_data.census import census_train_data
-from maeft_data.credit import credit_train_data
-from maeft_data.bank import  bank_train_data
-from maeft_data.compas import  compas_train_data
-from maeft_data.meps import  meps_train_data
-from maeft_data.tae import tae_train_data
 from maeft_data.ricci import ricci_train_data
+from maeft_data.tae import tae_train_data
 from scipy.spatial import distance
 from sklearn.cluster import KMeans
-from utils.config import census, credit, bank, compas, meps, tae, ricci
+from utils.config import tae, ricci
+from catboost import CatBoostClassifier, CatBoostRegressor
+from rtdl_revisiting_models import FTTransformer
 from sklearn.metrics import silhouette_score
 from sklearn.covariance import MinCovDet
+import scipy
+import argparse
 import warnings
 warnings.filterwarnings("ignore")
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--dataset', type=str, default='tae')
+parser.add_argument('--model_struct', type=str, default='ft')   #mlp ft ml
+parser.add_argument('--task_type', type=str, default='classification') #classification or regression
+parser.add_argument('--sensitive', type=int, default=0)
+args = parser.parse_args()
+
+
 def orthogonal_init(layer, gain=1.0):
     nn.init.orthogonal_(layer.weight, gain=gain)
 
@@ -51,12 +59,11 @@ class Memory:
     def __init__(self, len):
         self.tansition = deque(maxlen=len)
         self.size = len
-        self.c = 2
 
     def update(self, state, action, reward, state_next):
         self.tansition.append([state, action, reward, state_next])
 
-    def sample(self, batch_size, st_act, step):
+    def sample(self, batch_size, st_act):
         length = self.size if len(self.tansition) >= self.size else len(self.tansition)
         idx = random.sample(range(0, length), batch_size)
         st = []
@@ -70,7 +77,7 @@ class Memory:
             act.append(temp[1])
             reward.append(temp[2])
             st_next.append(temp[3])
-            state_action_next.append([self.c * math.sqrt(math.log(step) / (x+1)) for x in st_act[tuple(temp[3])][0]])
+            state_action_next.append([math.sqrt(x+1) for x in st_act[tuple(temp[3])][0]])
         st = np.array(st, dtype=np.float32)
         act = np.array(act, dtype=np.int16)
         reward = np.array(reward, dtype=np.float32)
@@ -100,7 +107,6 @@ class DoubleDuelingDQN(object):
         self.tau = 0.5
         self.c = 2
    
-        
     def stock_experience(self, st, act, r, st_dash):
         self.memory.update(st, act, r, st_dash)
     
@@ -121,7 +127,7 @@ class DoubleDuelingDQN(object):
         return loss 
     
     def experience_replay(self, st_act):
-        st, act, reward, st_next, state_action_next = self.memory.sample(self.batch_size, st_act, self.step)
+        st, act, reward, st_next, state_action_next = self.memory.sample(self.batch_size, st_act)
         self.optimizer.zero_grad()
         loss = self.forward(st, act, reward, st_next, state_action_next)
         loss.backward()
@@ -137,9 +143,9 @@ class DoubleDuelingDQN(object):
                 q = self.model(state)
                 q = q[0].data
                 if st in st_act.keys():
-                    to_add = [self.c * math.sqrt(math.log(self.step) / (x+1)) for x in st_act[st][0]]
-                    to_add = torch.FloatTensor(to_add)
-                    q = q + to_add  
+                    to_divide = [math.sqrt(x+1)  for x in st_act[st][0]]
+                    to_divide = torch.FloatTensor(to_divide)
+                    q = q / to_divide  
                 q = q / self.T
                 func = nn.Softmax(dim=0)
                 action_probs = func(q) 
@@ -151,7 +157,7 @@ class DoubleDuelingDQN(object):
         with torch.no_grad():
             q = self.model(state)
             q = q[0].data
-            q = q + st_act
+            q = q / torch.FloatTensor(st_act)
             q = q / self.T
             func = nn.Softmax(dim=1)
             probs = func(q) 
@@ -173,7 +179,7 @@ class DoubleDuelingDQN(object):
 class k_cluster:
     def __init__(self, dataset_name, sensitive):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.data_config = {"census":census, "credit":credit, "bank":bank, "compas": compas, "meps": meps, "tae": tae, "ricci": ricci}
+        self.data_config = {"tae": tae, "ricci": ricci}
         self.dataset = dataset_name
         self.to_check_config = self.data_config[dataset]
         self.params = self.to_check_config.params
@@ -182,27 +188,49 @@ class k_cluster:
         self.low_bound = self.to_check_config.input_bounds[self.protected_params[0]][0]
         self.high_bound = self.to_check_config.input_bounds[self.protected_params[0]][1] + 1 
         self.array_length = self.high_bound - self.low_bound
-        self.model = torch.load("./model/{}/{}_mlp.pth".format(dataset, dataset)).to(self.device)  
-        
+        self.model_struct = args.model_struct
+        if self.model_struct == 'mlp':
+            self.model = torch.load("./model/{}/{}_mlp.pth".format(dataset, dataset)).to(self.device)  
+            self.model.eval()
+        elif self.model_struct == 'ml':
+            if self.dataset != 'math' and self.dataset != 'por':
+                model = CatBoostClassifier()
+            else:
+                model = CatBoostRegressor()
+            self.model = model.load_model("./model/{}/{}_catboost".format(self.dataset, self.dataset))
+        elif self.model_struct == 'ft':
+            if self.dataset == "census":
+                self.n_c = [1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0]
+            elif self.dataset == "bank":
+                self.n_c = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0]
+            elif self.dataset == "meps":
+                self.n_c = [0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0]
+            elif self.dataset == "credit":
+                self.n_c = [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 1, 0, 1, 0, 0]
+            elif self.dataset == "ricci" or self.dataset == "tae":
+                self.n_c = [0, 1, 1, 0, 1]
+            elif self.dataset == "compas":
+                self.n_c = [0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0]
+            elif self.dataset == "math" or self.dataset == "por":
+                self.n_c = [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]
+            elif self.dataset == "insurance":
+                self.n_c = [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0]
+        self.k = 0.08
     
-    def check_for_error_condition(self, t, sens, length):
+    def mlp_check_for_error_condition(self, t, sens, length):
         t = np.array([t])
         to_check = np.repeat(t, length, axis=0)
         temp = 0
         for i in range(self.low_bound, self.high_bound):
             to_check[temp][sens] = i
             temp += 1
-        #print(to_check)
         result = self.model(torch.tensor(np.vstack(to_check), dtype=torch.float).to(self.device))
         result = result.argmax(dim=1, keepdim=True).cpu()
-        #print(result, np.unique(result))
         if len(np.unique(result)) != 1:
             return True
         return False
     
-
-    def check_for_error_condition_rg(self, t, sens, length):
-
+    def mlp_check_for_error_condition_rg(self, t, sens, length):
         t = np.array([t])
         to_check = np.repeat(t, length, axis=0)
         temp = 0
@@ -210,24 +238,157 @@ class k_cluster:
             to_check[temp][sens] = int(i)
             temp += 1
         to_check = torch.tensor(np.vstack(to_check), dtype=torch.float).to(self.device)
-
         distances_input = torch.cdist(to_check, to_check, p=2)
-
         distances_output = torch.cdist(self.model(to_check), self.model(to_check), p=2)
-    
         fairness_check = distances_output <= self.k * distances_input
         if len(np.unique(fairness_check.cpu())) != 1:
             return True
+        return False
     
+    def ml_check_for_error_condition(self, t, sens, length):
+        t = np.array([t])
+        
+        to_check = np.repeat(t, length, axis=0)
+        temp = 0
+        for i in range(self.low_bound, self.high_bound):
+            to_check[temp][sens] = i
+            temp += 1
+        to_check = to_check.astype(int)
+        result = self.model.predict(np.vstack(to_check, dtype=int))
+        if len(np.unique(result)) != 1:
+            return True
+        return False
+    
+    def ml_check_for_error_condition_rg(self, t, sens, length):
+        t = np.array([t])
+        to_check = np.repeat(t, length, axis=0)
+        temp = 0
+        res = []
+        for i in range(self.low_bound, self.high_bound):
+            to_check[temp][sens] = i
+            res.append([self.model.predict(to_check[temp].astype(int))])
+            temp += 1
+
+        to_check = to_check.astype(int)
+        distances_input = torch.cdist(torch.tensor(to_check, dtype=torch.float), torch.tensor(to_check, dtype=torch.float), p=2)
+        distances_output = torch.cdist(torch.tensor(res, dtype=torch.float), torch.tensor(res, dtype=torch.float), p=2)
+        fairness_check = distances_output <=  0.08 * distances_input
+        if len(np.unique(fairness_check.cpu())) != 1:
+            return True
+        return False
+    
+    def ft_check_for_error_condition(self, t, sens, length):
+        t = np.array([t])
+        to_check = np.repeat(t, length, axis=0)
+        temp = 0
+        for i in range(self.low_bound, self.high_bound):
+            to_check[temp][sens] = i
+            temp += 1 
+        this_cont = []
+        this_cat = []
+        for i in to_check:
+            temp_cont = []
+            temp_cat = []
+            for j in range(len(i)):
+                if self.n_c[j] == 1:
+                    temp_cont.append(i[j])
+                else:
+                    temp_cat.append(i[j])
+            this_cont.append(temp_cont)
+            this_cat.append(temp_cat)
+        this_cont = torch.Tensor(this_cont).to(torch.int64).to(self.device)
+        this_cat = torch.Tensor(this_cat).to(torch.int64).to(self.device)
+        result = self.model(this_cont, this_cat).detach().cpu().numpy()
+        result = np.round(scipy.special.expit(result))
+        if len(np.unique(result)) != 1:
+            return True
+        return False
+    
+    def ft_check_for_error_condition_rg(self, t, sens, length):
+        t = np.array([t])
+        to_check = np.repeat(t, length, axis=0)
+        temp = 0
+        for i in range(self.low_bound, self.high_bound):
+            to_check[temp][sens] = int(i)
+            temp += 1
+        this_cont = []
+        this_cat = []
+        for i in to_check:
+            temp_cont = []
+            temp_cat = []
+            for j in range(len(i)):
+                if self.n_c[j] == 1:
+                    temp_cont.append(i[j])
+                else:
+                    temp_cat.append(i[j])
+            this_cont.append(temp_cont)
+            this_cat.append(temp_cat)
+        to_check = torch.tensor(np.vstack(to_check), dtype=torch.float).to(self.device)
+        this_cont = torch.Tensor(this_cont).to(torch.int64).to(self.device)
+        this_cat = torch.Tensor(this_cat).to(torch.int64).to(self.device)
+        distances_input = torch.cdist(to_check, to_check, p=2)
+        distances_output = torch.cdist(self.model(this_cont, this_cat), self.model(this_cont, this_cat), p=2)
+        fairness_check = distances_output <= self.k * distances_input
+        if len(np.unique(fairness_check.cpu())) != 1:
+            return True
         return False
        
     def cluster(self):
         #census 0 age 7 race 8 gender credit 8 gender 12 age bank 0 age compas 2 race meps 2 gender
-        data = {"meps": meps_train_data, "census": census_train_data, "credit": credit_train_data, "compas": compas_train_data, "bank": bank_train_data, "tae": tae_train_data, "ricci": ricci_train_data}
+        data = {"tae": tae_train_data, "ricci": ricci_train_data}
         X, Y, input_shape, nb_classes = data[dataset]()
         
+        if self.model_struct == 'ft':
+            x_cont = []
+            x_cat = []
+            for i in X:
+                temp_cont = []
+                temp_cat = []
+                for j in range(len(i)):
+                    if self.n_c[j] == 1:
+                        temp_cont.append(i[j])
+                    else:
+                        temp_cat.append(i[j])
+                x_cont.append(temp_cont)
+                x_cat.append(temp_cat)
+            n_cont_features = len(x_cont[0])
+            
+            d_out = 1 
+            cat_cardinalities = []
+            for i in range(len(self.to_check_config.input_bounds)):
+                if self.n_c[i] == 0:
+                    temp = self.to_check_config.input_bounds[i][1] + 1
+                    cat_cardinalities.append(temp)
+            self.model = FTTransformer(
+                n_cont_features=n_cont_features,
+                cat_cardinalities=cat_cardinalities,
+                d_out=d_out,
+                n_blocks=3,
+                d_block=192,
+                attention_n_heads=8,
+                attention_dropout=0.2,
+                ffn_d_hidden=None,
+                ffn_d_hidden_multiplier=4 / 3,
+                ffn_dropout=0.1,
+                residual_dropout=0.0,
+            ).to(self.device)
+            self.model.load_state_dict({k.replace('module.',''):v for k,v in torch.load("./model/{}/{}_ft.pth".format(dataset, dataset)).items()})
+            self.model.eval()
+        # seed sampling strategy
+        task_type = args.task_type
+        if task_type == 'classification' and self.model_struct == 'mlp':
+            is_discriminate = self.mlp_check_for_error_condition
+        elif task_type == 'classification' and self.model_struct == 'ft':
+            is_discriminate = self.ft_check_for_error_condition
+        elif task_type == 'classification' and self.model_struct == 'ml':
+            is_discriminate = self.ml_check_for_error_condition
+        elif task_type == 'regression' and self.model_struct == 'mlp':
+            is_discriminate = self.mlp_check_for_error_condition_rg
+        elif task_type == 'regression' and self.model_struct == 'ft':
+            is_discriminate = self.ft_check_for_error_condition_rg
+        elif task_type == 'regression' and self.model_struct == 'ml':
+            is_discriminate = self.ml_check_for_error_condition_rg
         this_length = len(X[0])
-       
         seed = []
         mean = []
         covariance = []
@@ -235,35 +396,24 @@ class k_cluster:
         dis_kmeans = []
         for i in range(len(X)):
             temp = X[i].tolist()
-            if self.check_for_error_condition(temp, self.protected_params[0], self.array_length):
+            if is_discriminate(temp, self.protected_params[0], self.array_length):
                 dis_x.append(i)
                 temp = temp[:self.protected_params[0]] + temp[self.protected_params[0] + 1:]
                 dis_kmeans.append(temp)
-                
         if len(dis_kmeans) <= 10:
             seed = dis_x
         else:
-            """ max_clusters = 10
+            max_clusters = 10
             best_num_clusters = 0
             best_silhouette = -1
             for i in range(2, max_clusters+1):
                 kmeans = KMeans(n_clusters=i, init = "k-means++", n_init='auto', random_state=2024).fit(dis_kmeans)
                 labels = kmeans.labels_
                 silhouette = silhouette_score(dis_kmeans, labels)
-                print(i, silhouette)
                 if silhouette > best_silhouette:
                     best_silhouette = silhouette
                     best_num_clusters = i
-            print(best_num_clusters) """
-            if self.dataset == "tae":
-                best_num_clusters = 7
-                to_split = 2
-            else:
-                best_num_clusters = 2
-                to_split = 6
-            
-            # tae 7
-         
+            to_split = math.ceil(12 / best_num_clusters)
             kmeans = KMeans(n_clusters=best_num_clusters, init = "k-means++", n_init='auto', random_state=2024)
             kmeans.fit_predict(dis_kmeans)
             for i in range(best_num_clusters):
@@ -273,36 +423,33 @@ class k_cluster:
                     if kmeans.labels_[j] == i:
                         X_.append(dis_kmeans[j])
                         number_x.append(dis_x[j])
-            
                 if len(X_) <= 3:
-                    for i in number_x:
-                        seed.append(i)
+                    for this_seed in number_x:
+                        seed.append(this_seed)
                 else:
                     temp = kmeans.transform(X_)[:, i]
                     ind = np.argsort(temp)
                     ind = ind.tolist()
-                    for i in range(to_split):
-                        seed.append(number_x[ind[int(i*len(ind)/to_split)]]) 
-
-    
+                    for this_part in range(to_split):
+                        seed.append(number_x[ind[int(this_part*len(ind)/to_split)]]) 
+        seed = list(set(seed))
+        # calculate mean and covariance of training data using MinCovDet
         train_data = []
         for i in X:
             i = i.tolist()
             temp = i[:self.sensitive] + i[self.sensitive+1:]
             train_data.append(temp)
-            
         train_data = np.array(train_data)
         mcd = MinCovDet(random_state=2024, support_fraction=0.9) 
         mcd.fit(train_data)
         mean = mcd.location_
         covariance = mcd.covariance_
         rank = np.linalg.matrix_rank(covariance)
-        
         if rank == this_length:
             this_inv = np.linalg.inv(covariance)
         else:
             this_inv = np.linalg.pinv(covariance)
-            
+        # calculate MD of between each sample in training data and training data
         distances = []
         for i in train_data:
             mahalanobis_dist = distance.mahalanobis(i, mean, this_inv)
@@ -310,25 +457,25 @@ class k_cluster:
         distances.sort()
         median = distances[int(len(X)/2)]
         this_max = distances[-1]
-        
         this_threshold = this_max
-        
-    
         return seed, mean, this_inv, this_threshold, median
-
+        
 if __name__ == "__main__":
-    for i in range(5):
-        dataset = "tae"
-        sensitive = 0
-        #cluster_num = 4
+    dataset = args.dataset
+    task_type = args.task_type
+    if (task_type == 'regression' and (dataset != 'math' and dataset != 'por')) or (task_type == 'classification' and (dataset == 'math' or dataset == 'por')):
+        print('Error! Dataset and task type misaligened')
+    else:
+        sensitive = args.sensitive
+        os.environ['DATASET'] = dataset
+        os.environ['MODEL_STRUCT'] = args.model_struct
+        os.environ['TASK_TYPE'] = task_type
+        os.environ['SENSITIVE'] = str(sensitive)
         episodes = 402
         steps = 50
         this_cluster = k_cluster(dataset, sensitive)
-        
         select_seed , mean, covariance, this_threshold, median = this_cluster.cluster()
         print(select_seed)
-        
-
         env = gym.make("MyEnv-v0")
         state_size = env.observation_space.shape[0] 
         action_size = env.action_space.n 
@@ -364,4 +511,4 @@ if __name__ == "__main__":
                     this_loss += agent.loss
             
         end_time = time.time()
-        print(end_time - start_time)  
+        print(end_time - start_time)   
