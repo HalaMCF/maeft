@@ -117,6 +117,7 @@ elif model_struct == 'ft':
 k = 0.08
 
 def mlp_check_for_error_condition(t, sens, length):
+    t = np.insert(t, sens, low_bound) 
     t = np.array([t])
     to_check = np.repeat(t, length, axis=0)
     temp = 0

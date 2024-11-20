@@ -245,7 +245,6 @@ class k_cluster:
     
     def ml_check_for_error_condition(self, t, sens, length):
         t = np.array([t])
-        
         to_check = np.repeat(t, length, axis=0)
         temp = 0
         for i in range(self.low_bound, self.high_bound):
