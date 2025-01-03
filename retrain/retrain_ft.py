@@ -39,7 +39,7 @@ if dataset == 'ricci' or dataset == 'credit' or dataset == 'tae':
 else:
     batch = 256
 
-batch_size = 256
+
 if dataset == 'bank' or dataset == 'tae':
     sensitive = 0
 elif dataset == 'compas' or dataset == 'ricci':
@@ -209,7 +209,7 @@ try:
         prob_all = []
         label_all = []
         model.eval()
-        for batch in delu.iter_batches(data["test"], batch_size):
+        for batch in delu.iter_batches(data["test"], 4096):
         
             prob = model(batch["x_cont"], batch.get("x_cat")).detach().cpu().numpy()
             prob = scipy.special.expit(prob)
@@ -267,7 +267,7 @@ try:
     n_epochs = 300
     patience = 20
     
-    epoch_size = math.ceil(len(Y_train) / batch_size)
+    epoch_size = math.ceil(len(Y_train) / batch)
     timer = delu.tools.Timer()
     early_stopping = delu.tools.EarlyStopping(patience, mode="max")
     best = {
@@ -319,7 +319,7 @@ try:
     is_change = False
     best_auc = 0
     for epoch in range(n_epochs):
-        for batch in delu.iter_batches(data["train"], batch_size, shuffle=True):  
+        for batch in delu.iter_batches(data["train"], batch, shuffle=True):  
             model.train()
             optimizer.zero_grad()
             loss = loss_fn(apply_model(batch), batch["y"])
