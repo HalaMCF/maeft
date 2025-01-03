@@ -35,9 +35,9 @@ method = sys.argv[2]
 
 
 if dataset == 'ricci' or dataset == 'credit' or dataset == 'tae':
-    batch = 32          
+    batch_size = 32          
 else:
-    batch = 256
+    batch_size = 256
 
 
 if dataset == 'bank' or dataset == 'tae':
@@ -267,7 +267,7 @@ try:
     n_epochs = 300
     patience = 20
     
-    epoch_size = math.ceil(len(Y_train) / batch)
+    epoch_size = math.ceil(len(Y_train) / batch_size)
     timer = delu.tools.Timer()
     early_stopping = delu.tools.EarlyStopping(patience, mode="max")
     best = {
@@ -319,7 +319,7 @@ try:
     is_change = False
     best_auc = 0
     for epoch in range(n_epochs):
-        for batch in delu.iter_batches(data["train"], batch, shuffle=True):  
+        for batch in delu.iter_batches(data["train"], batch_size, shuffle=True):  
             model.train()
             optimizer.zero_grad()
             loss = loss_fn(apply_model(batch), batch["y"])
