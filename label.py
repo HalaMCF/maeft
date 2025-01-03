@@ -8,41 +8,26 @@ from utils.config import census, credit, bank, meps, ricci, tae, compas, student
 
 
 
-dataset = "math"
+dataset = "ricci"
 data_config = {"census": census, "credit": credit, "bank": bank, "meps": meps, "ricci": ricci, "tae": tae, "compas": compas, "math": student_math, "por":student_por}
 this_config = data_config[dataset].input_bounds
-protected = [1,2]
-sensitive = 2
+protected = [3]
+sensitive = [0,1,3]
 model = "ft"
-this_label = 32
-number = 849610
+this_label = 5
+number = 5
 method = "maeft"
 
-if method == "dice":
-    datapath = '{}.npy'.format(number)
-    to_aug = np.load(datapath)
-    X = to_aug
-elif method == "limi":
-    to_aug = []
-    with open("global_samples.npy", "r") as ins:
-        i = 0
-        for line in ins:
-            line = line.strip()
-            line1 = line.split(",")
-            L = [int(i) for i in line1]
-            to_aug.append(L)
-            if i == 0:
-                i += 1
-                continue
-    X = np.array(to_aug, dtype=float)
-elif method == "maeft" or method == "ftrl": 
-    datapath = '{}_{}.npy'.format(number, dataset)
-    to_aug = np.load(datapath)
-    X = []
-    for i in to_aug:
-        value = np.random.randint(this_config[sensitive][0], this_config[sensitive][1])
-        i = np.insert(i, sensitive, value) 
-        X.append(i)
+
+
+datapath = '{}_{}.npy'.format(number, dataset)
+to_aug = np.load(datapath)
+X = []
+for i in to_aug:
+    for j in sensitive:
+        value = np.random.randint(this_config[j][0], this_config[j][1])
+        i = np.insert(i, j, value) 
+    X.append(i)
        
 
 ensemble_clf = joblib.load(
@@ -53,6 +38,6 @@ label_vote = ensemble_clf.predict(np.delete(X, protected, axis=1))
 X_aug = list(X)
 for i in range(len(label_vote)):
     X_aug[i] = np.insert(X_aug[i], this_label, round(label_vote[i]))
-np.save("{}_{}_{}_{}.npy".format(method, dataset, model, sensitive), X_aug)  
+np.save("{}_{}_{}.npy".format(method, dataset, model), X_aug)  
 
 
