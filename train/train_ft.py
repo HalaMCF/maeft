@@ -47,7 +47,7 @@ elif dataset == "compas":
 X_train, Y_train, input_shape, nb_classes = data[dataset]()
 
 
-d_out = 1 
+d_out = nb_classes if task_type == "multiclass" else 1 
 x_cont = []
 x_cat = []
 for i in X_train:
@@ -139,7 +139,16 @@ def apply_model(batch: Dict[str, Tensor]) -> Tensor:
 
     else:
         raise RuntimeError(f"Unknown model type: {type(model)}")
-
+    
+if task_type != "multiclass":
+    # Required by F.binary_cross_entropy_with_logits
+    for part in data:
+        data[part]["y"] = data[part]["y"].float()
+           
+if task_type == "multiclass":
+    # Required by F.cross_entropy
+    for part in data:
+        data[part]["y"] = data[part]["y"].long()
 
 loss_fn = (
     F.binary_cross_entropy_with_logits
@@ -171,14 +180,11 @@ def evaluate(part: str) -> float:
         y_pred = np.round(scipy.special.expit(y_pred))
         #print(y_pred)
         score = accuracy_score(y_true, y_pred)
-    
+    elif task_type == "multiclass":
+        y_pred = y_pred.argmax(1)
+        score = accuracy_score(y_true, y_pred)
     return score  # The higher -- the better.
 
-
-# For demonstration purposes (fast training and bad performance),
-# one can set smaller values:
-# n_epochs = 20
-# patience = 2
 n_epochs = 300
 patience = 40
 
@@ -194,7 +200,7 @@ best = {
 
 
 timer.run()
-for epoch in range(1):
+for epoch in range(n_epochs):
     for batch in tqdm(
         delu.iter_batches(data["train"], batch_size, shuffle=True),
         desc=f"Epoch {epoch}",

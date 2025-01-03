@@ -175,7 +175,7 @@ def ml_check_for_error_condition_rg( t, sens, length):
     to_check = to_check.astype(int)
     distances_input = torch.cdist(torch.tensor(to_check, dtype=torch.float), torch.tensor(to_check, dtype=torch.float), p=2)
     distances_output = torch.cdist(torch.tensor(res, dtype=torch.float), torch.tensor(res, dtype=torch.float), p=2)
-    fairness_check = distances_output <=  0.08 * distances_input
+    fairness_check = distances_output <= k * distances_input
     if len(np.unique(fairness_check.cpu())) != 1:
         return True
     return False

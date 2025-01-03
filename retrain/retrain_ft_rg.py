@@ -112,23 +112,7 @@ try:
 
 
     X_valid, Y_valid, input_shape, nb_classes = data_val[dataset]()
-    remaining_indices = list(set(range(to_add_length)) - set(idx))
-    if len(remaining_indices) != 0:
-        remaining_elements = [to_add[i] for i in remaining_indices]
-        to_x_valid = min(1 * len(X_valid), len(remaining_indices))
-        idx_valid = random.sample(range(0, len(remaining_elements)), to_x_valid) 
-        x_add_v = []
-        y_add_v = []
-
-        for i in idx_valid:
-            x_add_v.append(remaining_elements[i][:-1])
-            y_add_v.append(remaining_elements[i][-1])  
-
-        X_valid = np.append(X_valid, x_add_v, axis=0)
-        Y_valid = np.append(Y_valid, y_add_v, axis=0) 
-
     X_test_length = len(X_valid)
-
     x_cont_valid = []
     x_cat_valid = []
     for i in X_valid:

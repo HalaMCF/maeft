@@ -18,7 +18,7 @@
 
 ## Python Version
 
-- python 3.8 .18(preferred)
+- python 3.8.18(preferred)
 
 ## Install Requested Python Packages
 
