@@ -6,32 +6,39 @@ from maeft_data.bank import bank_train_data, bank_val_data, bank_test_data
 from maeft_data.meps import meps_train_data, meps_val_data, meps_test_data
 from maeft_data.tae import tae_train_data, tae_val_data, tae_test_data
 from maeft_data.ricci import ricci_train_data, ricci_val_data, ricci_test_data
-from maeft_data.math import math_train_data, math_val_data, math_test_data
 from maeft_data.compas import compas_train_data, compas_val_data, compas_test_data
+from maeft_data.oulad import oulad_train_data, oulad_val_data, oulad_test_data
 import torch.nn.functional as F
-from utils.config import census, credit, bank, compas, meps, tae, ricci
+from utils.config import census, credit, bank, compas, meps, tae, ricci, oulad
 import numpy as np
-from torch.utils.data import Dataset, DataLoader, TensorDataset
-from rtdl_revisiting_models import MLP, ResNet, FTTransformer
+from rtdl_revisiting_models import FTTransformer
 from tqdm.std import tqdm
 import random
 import delu
 import scipy
 import math
-from tqdm.std import tqdm
 from torch import Tensor
 from typing import Dict
 from sklearn.metrics import accuracy_score
 from sklearn.metrics import roc_auc_score
 import copy
 import warnings
-import sys
+from utils.is_discriminate import ft_check_for_error_condition
 import pandas as pd
 warnings.filterwarnings("ignore")
+import argparse
 
-task_type = "binclass"
-dataset = sys.argv[1]
-method = sys.argv[2]
+parser = argparse.ArgumentParser()
+parser.add_argument('--dataset', type=str, default='oulad')
+parser.add_argument('--method', type=str, default='maeft')  
+parser.add_argument('--task_type', type=str, default='multiclass') #binclass, multiclass or regression
+parser.add_argument('--d_out', type=int, default=3) # for binary classification and regression, d_out = 1; for multi classification, d_out = class_num
+parser.add_argument('--sensitive', type=lambda s: list(map(int, s.split(','))), default=[2]) 
+args = parser.parse_args()
+
+task_type = args.task_type
+dataset = args.dataset
+method = args.method
 
 
 if dataset == 'ricci' or dataset == 'credit' or dataset == 'tae':
@@ -39,36 +46,23 @@ if dataset == 'ricci' or dataset == 'credit' or dataset == 'tae':
 else:
     batch_size = 256
 
-
-if dataset == 'bank' or dataset == 'tae':
-    sensitive = 0
-elif dataset == 'compas' or dataset == 'ricci':
-    sensitive = 3
-elif dataset == 'census':
-    sensitive = 7
-elif dataset == 'credit':
-    sensitive = 12
-elif dataset == 'math' or dataset == 'por' or dataset == 'meps':
-    sensitive = 2
+protected_params = args.sensitive
 
 sample = 1
-protected_params = [sensitive]
-data_config = {"census":census, "credit":credit, "bank":bank, "compas": compas, "meps": meps, "tae": tae, "ricci": ricci}
+data_config = {"census":census, "credit":credit, "bank":bank, "compas": compas, "meps": meps, "tae": tae, "ricci": ricci, "oulad": oulad}
 to_check_config = data_config[dataset]
-low_bound = to_check_config.input_bounds[protected_params[0]][0]
-high_bound = to_check_config.input_bounds[protected_params[0]][1] + 1 
-array_length = high_bound - low_bound
+low_bound = [to_check_config.input_bounds[attr][0] for attr in protected_params]
+high_bound = [to_check_config.input_bounds[attr][1] + 1 for attr in protected_params]
 
 try:
-    #to_add = np.load("./{}_generate/{}_{}_ft_{}.npy".format(method, method, dataset,protected_params[0]))
-    to_add = np.load("{}_{}_ft_{}.npy".format(method, dataset, protected_params[0]))
+    to_add = np.load("./oulad_data/ft/label_{}.npy".format(method))
 
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    data = {"census":census_train_data, "credit": credit_train_data, "bank": bank_train_data, "meps": meps_train_data, "tae": tae_train_data, "ricci": ricci_train_data, "compas": compas_train_data}
-    data_test = {"census":census_test_data, "credit": credit_test_data, "bank": bank_test_data, "meps": meps_test_data, "tae": tae_test_data, "ricci": ricci_test_data, "compas": compas_test_data}
-    data_val = {"census":census_val_data, "credit": credit_val_data, "bank": bank_val_data, "meps":meps_val_data, "tae": tae_val_data, "ricci": ricci_val_data, "compas": compas_val_data}
+    data = {"census":census_train_data, "credit": credit_train_data, "bank": bank_train_data, "meps": meps_train_data, "tae": tae_train_data, "ricci": ricci_train_data, "compas": compas_train_data, "oulad": oulad_train_data}
+    data_test = {"census":census_test_data, "credit": credit_test_data, "bank": bank_test_data, "meps": meps_test_data, "tae": tae_test_data, "ricci": ricci_test_data, "compas": compas_test_data, "oulad": oulad_test_data}
+    data_val = {"census":census_val_data, "credit": credit_val_data, "bank": bank_val_data, "meps":meps_val_data, "tae": tae_val_data, "ricci": ricci_val_data, "compas": compas_val_data, "oulad": oulad_val_data}
 
     this_config = data_config[dataset].input_bounds
 
@@ -84,6 +78,8 @@ try:
         n_c = [0, 1, 1, 0, 1]
     elif dataset == "compas":
         n_c = [0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0]
+    elif dataset == "oulad":
+        n_c = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1]
         
     X_train, Y_train, input_shape, nb_classes = data[dataset]()
     X_test, Y_test, input_shape, nb_classes = data_test[dataset]()
@@ -113,7 +109,7 @@ try:
     x_cont_valid = torch.Tensor(x_cont_valid).to(torch.int64).to(device)
     x_cat_valid = torch.Tensor(x_cat_valid).to(torch.int64).to(device)
 
-    d_out = 1 
+    d_out = args.d_out
     x_cont = []
     x_cat = []
     for i in X_train:
@@ -187,7 +183,6 @@ try:
             lr=1e-4,
             weight_decay=1e-5,
         )  
-   
     else:
         optimizer = torch.optim.SGD(
             model.make_parameter_groups(),
@@ -204,18 +199,37 @@ try:
         part: {k: torch.as_tensor(v, device=device) for k, v in data_numpy[part].items()}
         for part in data_numpy
     }
-
+    if task_type != "multiclass":
+    # Required by F.binary_cross_entropy_with_logits
+        for part in data:
+            data[part]["y"] = data[part]["y"].float()
+            
+    if task_type == "multiclass":
+        # Required by F.cross_entropy
+        for part in data:
+            data[part]["y"] = data[part]["y"].long()
+            
     def cal_auc():
-        prob_all = []
-        label_all = []
-        model.eval()
-        for batch in delu.iter_batches(data["test"], 4096):
-        
-            prob = model(batch["x_cont"], batch.get("x_cat")).detach().cpu().numpy()
-            prob = scipy.special.expit(prob)
-            prob_all.extend(prob[:,0])
-            label_all.extend(batch["y"].cpu())
-        return roc_auc_score(label_all,prob_all)
+        if task_type == 'binclass':
+            prob_all = []
+            label_all = []
+            model.eval()
+            for batch in delu.iter_batches(data["test"], 4096): 
+                prob = model(batch["x_cont"], batch.get("x_cat")).detach().cpu().numpy()
+                prob = scipy.special.expit(prob)
+                prob_all.extend(prob[:,0])
+                label_all.extend(batch["y"].cpu())
+            return roc_auc_score(label_all,prob_all)
+        else:
+            prob_all = []
+            label_all = []
+            model.eval()
+            for batch in delu.iter_batches(data["test"], 4096):
+                prob = model(batch.get("x_cont"), batch.get("x_cat")).detach().cpu().numpy()
+                prob = scipy.special.softmax(prob, axis=1)
+                prob_all.extend(prob)
+                label_all.extend(batch["y"].cpu())
+            return roc_auc_score(label_all, prob_all, multi_class='ovr', average='macro')
 
 
     def apply_model(batch: Dict[str, Tensor]) -> Tensor:
@@ -254,16 +268,13 @@ try:
 
         if task_type == "binclass":
             y_pred = np.round(scipy.special.expit(y_pred))
-            #print(y_pred)
             score = accuracy_score(y_true, y_pred)
-        
-        return score  # The higher -- the better.
+        elif task_type == "multiclass":
+            y_pred = y_pred.argmax(1)
+            score = accuracy_score(y_true, y_pred)
+            
+        return score  
 
-
-    # For demonstration purposes (fast training and bad performance),
-    # one can set smaller values:
-    # n_epochs = 20
-    # patience = 2
     n_epochs = 300
     patience = 20
     
@@ -276,38 +287,7 @@ try:
         "epoch": -1,
     }
     #print(cal_auc())
-    def check_for_error_condition(t, sens, length):
-            t = np.array([t])
-            to_check = np.repeat(t, length, axis=0)
-            temp = 0
-            for i in range(low_bound, high_bound):
-                to_check[temp][sens] = i
-                temp += 1 
-            
-            this_cont = []
-            this_cat = []
-            for i in to_check:
-                temp_cont = []
-                temp_cat = []
-                for j in range(len(i)):
-                    if n_c[j] == 1:
-                        temp_cont.append(i[j])
-                    else:
-                        temp_cat.append(i[j])
-                this_cont.append(temp_cont)
-                this_cat.append(temp_cat)
-            this_cont = torch.Tensor(this_cont).to(torch.int64).to(device)
-            this_cat = torch.Tensor(this_cat).to(torch.int64).to(device)
-            result = model(this_cont, this_cat).detach().cpu().numpy()
-            result = np.round(scipy.special.expit(result))
-            if len(np.unique(result)) != 1:
-                return True
-            return False
-
-    """ for i in idx:
-        model.eval()
-        result, max_diff = check_for_error_condition(to_add[i][:-1], protected_params[0], array_length)
-        print(max_diff) """
+ 
         
     timer.run()
 
@@ -331,7 +311,7 @@ try:
         with torch.no_grad():
             count = 0
             for i in X_valid:
-                result = check_for_error_condition(i, protected_params[0], array_length)
+                result = ft_check_for_error_condition(model, i, protected_params, low_bound, high_bound, 0, n_c, device, task_type)
                 if result:
                     count += 1
         #print(test_score, evaluate("test"))
@@ -370,7 +350,7 @@ try:
     count = 0
     with torch.no_grad():
         for i in X_test:
-            result = check_for_error_condition(i, protected_params[0], array_length)
+            result = ft_check_for_error_condition(model, i, protected_params, low_bound, high_bound, 0, n_c, device, task_type)
             if result:
                 count += 1
     #print(count / len(X_test),cal_auc() )

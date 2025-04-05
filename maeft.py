@@ -20,9 +20,10 @@ from maeft_data.compas import  compas_train_data
 from maeft_data.meps import  meps_train_data
 from maeft_data.math import math_train_data
 from maeft_data.por import por_train_data
+from maeft_data.oulad import oulad_train_data
 from scipy.spatial import distance
 from sklearn.cluster import KMeans
-from utils.config import census, credit, bank, compas, meps, student_math, student_por
+from utils.config import census, credit, bank, compas, meps, student_math, student_por, oulad
 from catboost import CatBoostClassifier, CatBoostRegressor
 from rtdl_revisiting_models import FTTransformer
 from sklearn.metrics import silhouette_score
@@ -34,10 +35,11 @@ import warnings
 warnings.filterwarnings("ignore")
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', type=str, default='math')
+parser.add_argument('--dataset', type=str, default='meps')
 parser.add_argument('--model_struct', type=str, default='ml')   #mlp ft ml
-parser.add_argument('--task_type', type=str, default='regression') #classification or regression, here only binary classification
-parser.add_argument('--sensitive', type=lambda s: list(map(int, s.split(','))), default=[0,1,3]) #for single protected attribute [0], for multi protected attributes [0,1,2,....]
+parser.add_argument('--task_type', type=str, default='binclass') #binclass, multiclass or regression
+parser.add_argument('--d_out', type=int, default=1) # for binary classification and regression, d_out = 1; for multi classification, d_out = class_num
+parser.add_argument('--sensitive', type=lambda s: list(map(int, s.split(','))), default=[2]) #for single protected attribute [0], for multi protected attributes [0,1,2,....]
 args = parser.parse_args()
 
 
@@ -185,7 +187,7 @@ class DoubleDuelingDQN(object):
 class k_cluster:
     def __init__(self, dataset_name, sensitive):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.data_config = {"census":census, "credit":credit, "bank":bank, "compas": compas, "meps": meps, "math": student_math, "por": student_por}
+        self.data_config = {"census":census, "credit":credit, "bank":bank, "compas": compas, "meps": meps, "math": student_math, "por": student_por, "oulad": oulad}
         self.dataset = dataset_name
         self.to_check_config = self.data_config[dataset]
         self.params = self.to_check_config.params
@@ -216,12 +218,14 @@ class k_cluster:
             self.n_c = [0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0]
         elif self.dataset == "math" or self.dataset == "por":
             self.n_c = [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]
+        elif self.dataset == "oulad":
+            self.n_c = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1]
         self.k = 0.08
     
 
     def cluster(self):
         #census 0 age 7 race 8 gender credit 8 gender 12 age bank 0 age compas 2 race meps 2 gender
-        data = {"census":census_train_data, "credit": credit_train_data, "bank": bank_train_data, "meps": meps_train_data, "math": math_train_data, "por": por_train_data, "compas": compas_train_data}
+        data = {"census":census_train_data, "credit": credit_train_data, "bank": bank_train_data, "meps": meps_train_data, "math": math_train_data, "por": por_train_data, "compas": compas_train_data, "oulad": oulad_train_data}
         X, Y, input_shape, nb_classes = data[dataset]()
         
         if self.model_struct == 'ft':
@@ -238,7 +242,7 @@ class k_cluster:
                 x_cont.append(temp_cont)
                 x_cat.append(temp_cat)
             n_cont_features = len(x_cont[0])
-            d_out = 1 
+            d_out = args.d_out
             cat_cardinalities = []
             for i in range(len(self.to_check_config.input_bounds)):
                 if self.n_c[i] == 0:
@@ -261,11 +265,11 @@ class k_cluster:
             self.model.eval()
         # seed sampling strategy
         task_type = args.task_type
-        if task_type == 'classification' and self.model_struct == 'mlp':
+        if task_type != 'regression' and self.model_struct == 'mlp':
             is_discriminate = mlp_check_for_error_condition
-        elif task_type == 'classification' and self.model_struct == 'ft':
+        elif task_type != 'regression' and self.model_struct == 'ft':
             is_discriminate = ft_check_for_error_condition
-        elif task_type == 'classification' and self.model_struct == 'ml':
+        elif task_type != 'regression' and self.model_struct == 'ml':
             is_discriminate = ml_check_for_error_condition
         elif task_type == 'regression' and self.model_struct == 'mlp':
             is_discriminate = mlp_check_for_error_condition_rg
@@ -281,7 +285,7 @@ class k_cluster:
         dis_kmeans = []
         for i in range(len(X)):
             temp = X[i].tolist()
-            if is_discriminate(self.model, temp, self.protected_params, self.low_bound, self.high_bound, self.k, self.n_c, self.device):
+            if is_discriminate(self.model, temp, self.protected_params, self.low_bound, self.high_bound, self.k, self.n_c, self.device, task_type):
                 dis_x.append(i)
                 temp_removed = [val for idx, val in enumerate(temp) if idx not in self.protected_params]
                 dis_kmeans.append(temp_removed)
@@ -344,23 +348,24 @@ class k_cluster:
         this_max = distances[-1]
         this_threshold = this_max
         return seed, mean, this_inv, this_threshold, median
-        
+
 if __name__ == "__main__":
     dataset = args.dataset
     task_type = args.task_type
-    if (task_type == 'regression' and (dataset != 'math' and dataset != 'por')) or (task_type == 'classification' and (dataset == 'math' or dataset == 'por')):
+    if (task_type == 'regression' and (dataset != 'math' and dataset != 'por')) or (task_type != 'regression' and (dataset == 'math' or dataset == 'por')):
         print('Error! Dataset and task type misaligened')
     else:
         sensitive = args.sensitive
         os.environ['DATASET'] = dataset
         os.environ['MODEL_STRUCT'] = args.model_struct
         os.environ['TASK_TYPE'] = task_type
+        os.environ['D_OUT'] = str(args.d_out)
         os.environ['SENSITIVE'] = ','.join(map(str, sensitive))
+        #print(sensitive)
         episodes = 2002
         steps = 500
         this_cluster = k_cluster(dataset, sensitive)
         select_seed , mean, covariance, this_threshold, median = this_cluster.cluster()
-        print(select_seed)
         env = gym.make("MyEnv-v0")
         state_size = env.observation_space.shape[0] 
         action_size = env.action_space.n 
@@ -371,6 +376,7 @@ if __name__ == "__main__":
         this_dict['covariance'] = covariance
         this_dict['threshold'] = this_threshold
         this_dict['median'] = median
+        this_score = []
         print(median, this_threshold)
         seed_num = len(select_seed)
         for i in range(seed_num):
@@ -394,6 +400,6 @@ if __name__ == "__main__":
                     agent.train(state_action)
                     score += reward
                     this_loss += agent.loss
-            
+                this_score.append(score)
         end_time = time.time()
-        print(end_time - start_time)   
+        print(end_time - start_time) 

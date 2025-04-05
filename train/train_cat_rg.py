@@ -1,8 +1,6 @@
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score
-from catboost import CatBoostClassifier, Pool, CatBoostRegressor
+from catboost import  Pool, CatBoostRegressor
 import optuna
-from sklearn.metrics import accuracy_score, mean_absolute_error
+from sklearn.metrics import mean_absolute_error
 
 def objective(trial):
     to_train = "math"

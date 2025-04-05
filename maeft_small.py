@@ -30,10 +30,11 @@ from utils.is_discriminate import ml_check_for_error_condition, ml_check_for_err
 warnings.filterwarnings("ignore")
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--dataset', type=str, default='ricci')
+parser.add_argument('--dataset', type=str, default='tae')
 parser.add_argument('--model_struct', type=str, default='ft')   #mlp ft ml
-parser.add_argument('--task_type', type=str, default='classification') #classification or regression, here only binary classification
-parser.add_argument('--sensitive', type=lambda s: list(map(int, s.split(','))), default=[0,1,3]) #for single protected attribute [0], for multi protected attributes [0,1,2,....]
+parser.add_argument('--task_type', type=str, default='binclass') #binary, multi classification or regression
+parser.add_argument('--d_out', type=int, default=1) # for binary classification and regression, d_out = 1; for multi classification, d_out = class_num
+parser.add_argument('--sensitive', type=lambda s: list(map(int, s.split(','))), default=[0]) #for single protected attribute [0], for multi protected attributes [0,1,2,....]
 args = parser.parse_args()
 
 
@@ -222,7 +223,7 @@ class k_cluster:
                 x_cont.append(temp_cont)
                 x_cat.append(temp_cat)
             n_cont_features = len(x_cont[0])
-            d_out = 1 
+            d_out = args.d_out
             cat_cardinalities = []
             for i in range(len(self.to_check_config.input_bounds)):
                 if self.n_c[i] == 0:
@@ -245,11 +246,11 @@ class k_cluster:
             self.model.eval()
         # seed sampling strategy
         task_type = args.task_type
-        if task_type == 'classification' and self.model_struct == 'mlp':
+        if task_type != 'regression' and self.model_struct == 'mlp':
             is_discriminate = mlp_check_for_error_condition
-        elif task_type == 'classification' and self.model_struct == 'ft':
+        elif task_type != 'regression' and self.model_struct == 'ft':
             is_discriminate = ft_check_for_error_condition
-        elif task_type == 'classification' and self.model_struct == 'ml':
+        elif task_type != 'regression' and self.model_struct == 'ml':
             is_discriminate = ml_check_for_error_condition
         elif task_type == 'regression' and self.model_struct == 'mlp':
             is_discriminate = mlp_check_for_error_condition_rg
@@ -265,7 +266,7 @@ class k_cluster:
         dis_kmeans = []
         for i in range(len(X)):
             temp = X[i].tolist()
-            if is_discriminate(self.model, temp, self.protected_params, self.low_bound, self.high_bound, self.k, self.n_c, self.device):
+            if is_discriminate(self.model, temp, self.protected_params, self.low_bound, self.high_bound, self.k, self.n_c, self.device, task_type):
                 dis_x.append(i)
                 temp_removed = [val for idx, val in enumerate(temp) if idx not in self.protected_params]
                 dis_kmeans.append(temp_removed)
@@ -332,19 +333,20 @@ class k_cluster:
 if __name__ == "__main__":
     dataset = args.dataset
     task_type = args.task_type
-    if (task_type == 'regression' and (dataset != 'math' and dataset != 'por')) or (task_type == 'classification' and (dataset == 'math' or dataset == 'por')):
+    if (task_type == 'regression' and (dataset != 'math' and dataset != 'por')) or (task_type != 'regression' and (dataset == 'math' or dataset == 'por')):
         print('Error! Dataset and task type misaligened')
     else:
         sensitive = args.sensitive
         os.environ['DATASET'] = dataset
         os.environ['MODEL_STRUCT'] = args.model_struct
         os.environ['TASK_TYPE'] = task_type
+        os.environ['D_OUT'] = str(args.d_out)
         os.environ['SENSITIVE'] = ','.join(map(str, sensitive))
         episodes = 402
         steps = 50
         this_cluster = k_cluster(dataset, sensitive)
         select_seed , mean, covariance, this_threshold, median = this_cluster.cluster()
-        print(select_seed)
+        print(select_seed)   
         env = gym.make("MyEnv-v0")
         state_size = env.observation_space.shape[0] 
         action_size = env.action_space.n 

@@ -348,3 +348,25 @@ class compas:
     all_param = []
     for i in range(params):
         all_param.append(i)
+
+class oulad:
+    params = 12
+    input_bounds = []
+    input_bounds.append([0, 6])
+    input_bounds.append([0, 3])
+    input_bounds.append([0, 1])   #gender
+    input_bounds.append([1, 12])    
+    input_bounds.append([0, 4])
+    input_bounds.append([0, 9])
+    input_bounds.append([0, 2])
+    input_bounds.append([0, 6])
+    input_bounds.append([0, 3])
+    input_bounds.append([0, 1])
+    input_bounds.append([0, 99])
+    input_bounds.append([0, 10])
+ 
+    protected_params = [2]
+    
+    all_param = []
+    for i in range(params):
+        all_param.append(i)

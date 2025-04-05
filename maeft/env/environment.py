@@ -13,11 +13,12 @@ from maeft_data.tae import tae_train_data
 from maeft_data.ricci import ricci_train_data
 from maeft_data.math import math_train_data
 from maeft_data.por import por_train_data
+from maeft_data.oulad import oulad_train_data
 from catboost import CatBoostClassifier, CatBoostRegressor
 from rtdl_revisiting_models import FTTransformer
 sys.path.append('../')
 import copy
-from utils.config import census, credit, bank, compas, meps, tae, ricci, student_math, student_por
+from utils.config import census, credit, bank, compas, meps, tae, ricci, student_math, student_por, oulad
 import numpy as np
 from scipy.spatial import distance
 import math
@@ -29,14 +30,15 @@ args = argparse.Namespace(
     dataset=os.getenv('DATASET'),  
     model_struct=os.getenv('MODEL_STRUCT'),
     task_type=os.getenv('TASK_TYPE'),
+    d_out = int(os.getenv('D_OUT')),
     sensitive=list(os.getenv('SENSITIVE')) 
 )
 reward_biasd = 1.5
 reward_punished = -0.015
 # prepare testing data 
 #census 0 age 7 race 8 gender credit 8 gender 12 age bank 0 age compas 2 race meps 2 gender
-data = {"meps": meps_train_data, "census": census_train_data, "credit": credit_train_data, "compas": compas_train_data, "bank": bank_train_data, "tae": tae_train_data, "ricci": ricci_train_data, "math": math_train_data, "por": por_train_data}
-data_config = {"census":census, "credit":credit, "bank":bank, "compas": compas, "meps": meps, "tae": tae, "ricci": ricci, "math": student_math, "por": student_por}
+data = {"meps": meps_train_data, "census": census_train_data, "credit": credit_train_data, "compas": compas_train_data, "bank": bank_train_data, "tae": tae_train_data, "ricci": ricci_train_data, "math": math_train_data, "por": por_train_data, "oulad": oulad_train_data}
+data_config = {"census":census, "credit":credit, "bank":bank, "compas": compas, "meps": meps, "tae": tae, "ricci": ricci, "math": student_math, "por": student_por, "oulad": oulad}
 dataset = args.dataset
 model_struct = args.model_struct
 task_type = args.task_type
@@ -60,7 +62,7 @@ else:
     
 
 if dataset == "census":
-        n_c = [1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0]
+    n_c = [1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0]
 elif dataset == "bank":
     n_c = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0]
 elif dataset == "meps":
@@ -73,6 +75,9 @@ elif dataset == "compas":
     n_c = [0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0]
 elif dataset == "math" or dataset == "por":
     n_c = [0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1]
+elif dataset == "oulad":
+    n_c = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1]
+    
 if model_struct == 'mlp':
     model = torch.load("./model/{}/{}_mlp.pth".format(dataset, dataset)).to(device)  
     model.eval()
@@ -95,8 +100,7 @@ elif model_struct == 'ft':
                 temp_cat.append(i[j])
         x_cont.append(temp_cont)
         x_cat.append(temp_cat)
-    n_cont_features = len(x_cont[0])
-    d_out = 1 
+    n_cont_features = len(x_cont[0]) 
     cat_cardinalities = []
     for i in range(len(to_check_config.input_bounds)):
         if n_c[i] == 0:
@@ -105,7 +109,7 @@ elif model_struct == 'ft':
     model = FTTransformer(
         n_cont_features=n_cont_features,
         cat_cardinalities=cat_cardinalities,
-        d_out=d_out,
+        d_out=args.d_out,
         n_blocks=3,
         d_block=192,
         attention_n_heads=8,
@@ -120,11 +124,11 @@ elif model_struct == 'ft':
 k = 0.08
 
 
-if task_type == 'classification' and model_struct == 'mlp':
+if task_type != 'regression' and model_struct == 'mlp':
     is_discriminate_func = mlp_check_for_error_condition
-elif task_type == 'classification' and model_struct == 'ft':
+elif task_type != 'regression' and model_struct == 'ft':
     is_discriminate_func = ft_check_for_error_condition
-elif task_type == 'classification' and model_struct == 'ml':
+elif task_type != 'regression' and model_struct == 'ml':
     is_discriminate_func = ml_check_for_error_condition
 elif task_type == 'regression' and model_struct == 'mlp':
     is_discriminate_func = mlp_check_for_error_condition_rg
@@ -142,7 +146,6 @@ class MyEnv(gym.Env):
         self.episode_end = 500
         self.counts = 0
         self.observation_space = spaces.Box(low=0,high=184,shape=(params - len(protected_params),1))
-        self.fairness = 0
         self.biasd = 0
         self.error_set = set()
         self.total = 0
@@ -150,9 +153,6 @@ class MyEnv(gym.Env):
         self.kmeans_set = set()
         self.dup_error = 0
         self.dict = {}
-        self.obs = []
-        self.judge = 0
-        self.this_seed = []
         self.mean = 0
         self.covariance = []
         self.threshold = 0
@@ -167,7 +167,7 @@ class MyEnv(gym.Env):
         range1 = to_check_config.input_bounds[index]
         
         #calculate st_act
-        to_check = tuple(copy.deepcopy(self.current_sample))
+        to_check = tuple(self.current_sample)
 
         if to_check in self.dict.keys():
             self.dict[to_check][0][action] += 1
@@ -191,7 +191,7 @@ class MyEnv(gym.Env):
         to_check_disriminate_sample = copy.deepcopy(self.current_sample) 
         self.current_sample = [val for idx, val in enumerate(self.current_sample) if idx not in protected_params]
         #calculate another st_act
-        to_check_second = tuple(copy.deepcopy(self.current_sample))
+        to_check_second = tuple(self.current_sample)
         if to_check_second in self.dict.keys():
             if action % 2 == 0:
                 self.dict[to_check_second][0][action + 1] += 1
@@ -206,13 +206,12 @@ class MyEnv(gym.Env):
                 
         terminated = False
         x_ = copy.deepcopy(self.current_sample)
-        
         if tuple(x_) in self.total_set:
             if tuple(x_) in self.error_set:
                 self.dup_error += 1
         else:
             self.total_set.add(tuple(x_))
-            is_discriminate = is_discriminate_func(model, to_check_disriminate_sample, protected_params, low_bound, high_bound, k, n_c, device)
+            is_discriminate = is_discriminate_func(model, to_check_disriminate_sample, protected_params, low_bound, high_bound, k, n_c, device, task_type)
             if is_discriminate:
                 reward = reward_biasd
                 self.biasd += 1
@@ -237,13 +236,14 @@ class MyEnv(gym.Env):
         truncated = False
         if self.counts == self.episode_end:
             truncated = True
+        
             
         if self.total % to_divide == 0:
             print("The number of biased instances")
             print(self.biasd, self.dup_error)
             print("The number of total generate instances:")
             print(len(self.total_set))  
-            np.save("{}_{}.npy".format(self.biasd,dataset), list(self.error_set)) 
+            #np.save("maeft_{}_{}_{}.npy".format(dataset, args.model_struct, self.biasd), list(self.error_set)) 
 
 
         return self.observation_space, reward, terminated, truncated, self.dict
@@ -252,7 +252,6 @@ class MyEnv(gym.Env):
     def reset(self, options):
         self.current_sample = X[options["seed"]].tolist()
         self.current_sample = [val for idx, val in enumerate(self.current_sample) if idx not in protected_params]
-        self.this_seed = copy.deepcopy(self.current_sample)
         self.mean = options["mean"]
         self.covariance = options["covariance"]
         self.threshold = options["threshold"]

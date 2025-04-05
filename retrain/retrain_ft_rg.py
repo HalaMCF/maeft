@@ -1,37 +1,41 @@
 import torch
-import torch.nn as nn
 from maeft_data.math import math_train_data, math_val_data, math_test_data
 from maeft_data.por import por_train_data, por_val_data, por_test_data
 import torch.nn.functional as F
 from utils.config import student_math, student_por
 import numpy as np
-from torch.utils.data import Dataset, DataLoader, TensorDataset
-from rtdl_revisiting_models import MLP, ResNet, FTTransformer
+from rtdl_revisiting_models import FTTransformer
 from tqdm.std import tqdm
 import random
 import delu
-import scipy
 import math
 from tqdm.std import tqdm
 from torch import Tensor
 from typing import Dict
-from sklearn.metrics import accuracy_score
-from sklearn.metrics import roc_auc_score
 from sklearn.metrics import  mean_absolute_error
+from utils.is_discriminate import ft_check_for_error_condition_rg
 import copy
 import pandas as pd
-import sys
-dataset = sys.argv[1]
-method = sys.argv[2]
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('--dataset', type=str, default='oulad')
+parser.add_argument('--method', type=str, default='maeft')  
+parser.add_argument('--task_type', type=str, default='multiclass') #binclass, multiclass or regression
+parser.add_argument('--d_out', type=int, default=3) # for binary classification and regression, d_out = 1; for multi classification, d_out = class_num
+parser.add_argument('--sensitive', type=lambda s: list(map(int, s.split(','))), default=[2]) 
+args = parser.parse_args()
+
+dataset = args.dataset
+method = args.method
 task_type = "regression"
 batch_size = 32    
 sample = 1
-protected_params = [2]
+
+protected_params = args.sensitive
 data_config = {"math": student_math, "por": student_por}
 to_check_config = data_config[dataset]
-low_bound = to_check_config.input_bounds[protected_params[0]][0]
-high_bound = to_check_config.input_bounds[protected_params[0]][1] + 1 
-array_length = high_bound - low_bound
+low_bound = [to_check_config.input_bounds[attr][0] for attr in protected_params]
+high_bound = [to_check_config.input_bounds[attr][1] + 1 for attr in protected_params]
 
 try:
     to_add = np.load("./{}_generate/{}_{}_ft_{}.npy".format(method, method, dataset, protected_params[0]))
@@ -231,46 +235,6 @@ try:
         "epoch": -1,
     }
 
-    def check_for_error_condition(t, sens, length):
-        t = np.array([t])
-        to_check = np.repeat(t, length, axis=0)
-        temp = 0
-        for i in range(low_bound, high_bound):
-            to_check[temp][sens] = int(i)
-            temp += 1
-        
-        this_cont = []
-        this_cat = []
-        for i in to_check:
-            temp_cont = []
-            temp_cat = []
-            for j in range(len(i)):
-                if n_c[j] == 1:
-                    temp_cont.append(i[j])
-                else:
-                    temp_cat.append(i[j])
-            this_cont.append(temp_cont)
-            this_cat.append(temp_cat)
-        to_check = torch.tensor(np.vstack(to_check), dtype=torch.float).to(device)
-        this_cont = torch.Tensor(this_cont).to(torch.int64).to(device)
-        this_cat = torch.Tensor(this_cat).to(torch.int64).to(device)
-        
-
-        distances_input = torch.cdist(to_check, to_check, p=2)
-        #print(distances_input)
-        #print(model(this_cont, this_cat))
-        distances_output = torch.cdist(model(this_cont, this_cat), model(this_cont, this_cat), p=2)
-        #print(distances_output)
-
-        fairness_check = distances_output <= 0.08 * distances_input
-        if len(np.unique(fairness_check.cpu())) != 1:
-            return True
-
-        return False
-
-
-
-
     timer.run()
     is_modified = 0
     this_loss = 100000000
@@ -294,7 +258,7 @@ try:
             test_score = evaluate("val")
             count = 0
             for i in X_valid:
-                result = check_for_error_condition(i, protected_params[0], array_length)
+                result = ft_check_for_error_condition_rg(model, i, protected_params, low_bound, high_bound, 0.08, n_c, device, task_type)
                 if result:
                     count += 1
                     
@@ -320,7 +284,7 @@ try:
     count = 0
     with torch.no_grad():
         for i in X_test:
-            result = check_for_error_condition(i, protected_params[0], array_length)
+            result = ft_check_for_error_condition_rg(model, i, protected_params, low_bound, high_bound, 0.08, n_c, device, task_type)
             if result:
                 count += 1
 

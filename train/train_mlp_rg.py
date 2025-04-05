@@ -2,17 +2,10 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import optuna
-from optuna.trial import TrialState
 from maeft_data.math import math_train_data, math_val_data, math_test_data
 from maeft_data.por import por_train_data, por_val_data, por_test_data
-from sklearn import preprocessing
-from sklearn.model_selection import train_test_split
 import torch.nn.functional as F
-from utils.config import census
-import numpy as np
 from torch.utils.data import Dataset, DataLoader, TensorDataset
-from tqdm.std import tqdm
-from torch import Tensor
 
 def define_model(trial):
     # 超参数：网络的层数1~3层

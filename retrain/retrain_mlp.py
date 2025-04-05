@@ -1,78 +1,56 @@
 import torch
-import torch.nn as nn
 from maeft_data.census import census_train_data, census_val_data, census_test_data
 from maeft_data.credit import credit_train_data, credit_val_data, credit_test_data
 from maeft_data.bank import bank_train_data, bank_val_data, bank_test_data
 from maeft_data.meps import meps_train_data, meps_val_data, meps_test_data
 from maeft_data.tae import tae_train_data, tae_val_data, tae_test_data
 from maeft_data.ricci import ricci_train_data, ricci_val_data, ricci_test_data
-from maeft_data.math import math_train_data, math_val_data, math_test_data
 from maeft_data.compas import compas_train_data, compas_val_data, compas_test_data
+from maeft_data.oulad import oulad_train_data, oulad_val_data, oulad_test_data
 import torch.nn.functional as F
-from utils.config import census, credit, bank, compas, meps, tae, ricci
+from utils.config import census, credit, bank, compas, meps, tae, ricci, oulad
 import numpy as np
-from torch.utils.data import Dataset, DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset
 from tqdm.std import tqdm
 import random
 from sklearn.metrics import roc_auc_score
+from utils.is_discriminate import mlp_check_for_error_condition
 import copy
 import warnings
 import pandas as pd
 import copy
-import sys
 warnings.filterwarnings("ignore")
-dataset = sys.argv[1]
-method = sys.argv[2]
-""" dataset = 'ricci'
-method = 'maeft' """
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--dataset', type=str, default='oulad')
+parser.add_argument('--method', type=str, default='ftrl')  
+parser.add_argument('--task_type', type=str, default='multiclass')
+parser.add_argument('--sensitive', type=lambda s: list(map(int, s.split(','))), default=[2]) 
+args = parser.parse_args()
+
+dataset = args.dataset
+method = args.method
+all_method = ['maeft', 'ftrl', 'dice', 'limi']
 if dataset == 'ricci' or dataset == 'credit':
     batch = 32             
 else:
     batch = 256
     
-if dataset == 'bank' or dataset == 'tae':
-    sensitive = 0
-elif dataset == 'compas' or dataset == 'ricci':
-    sensitive = 3
-elif dataset == 'census':
-    sensitive = 7
-elif dataset == 'credit':
-    sensitive = 12
-elif dataset == 'math' or dataset == 'por' or dataset == 'meps':
-    sensitive = 2
+protected_params = args.sensitive
+    
 
 sample = 1
-protected_params = [sensitive]
-#print(sys.argv)
 
-data_config = {"census":census, "credit":credit, "bank":bank, "compas": compas, "meps": meps, "tae": tae, "ricci": ricci}
+data_config = {"census":census, "credit":credit, "bank":bank, "compas": compas, "meps": meps, "tae": tae, "ricci": ricci, "oulad": oulad}
 to_check_config = data_config[dataset]
-low_bound = to_check_config.input_bounds[protected_params[0]][0]
-high_bound = to_check_config.input_bounds[protected_params[0]][1] + 1 
-array_length = high_bound - low_bound
+low_bound = [to_check_config.input_bounds[attr][0] for attr in protected_params]
+high_bound = [to_check_config.input_bounds[attr][1] + 1 for attr in protected_params]
 
-def check_for_error_condition(t, sens, length):
-    t = np.array([t])
-    to_check = np.repeat(t, length, axis=0)
-    temp = 0
-    for i in range(low_bound, high_bound):
-        to_check[temp][sens] = i
-        temp += 1
-    #print(to_check)
-    result = model(torch.tensor(np.vstack(to_check), dtype=torch.float).to(device))
-    #print(max_diff)
-    result = result.argmax(dim=1, keepdim=True).cpu()
-    #print(result, np.unique(result))
-    if len(np.unique(result)) != 1:
-        return True
-    return False
-
-
-    
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-data = {"census":census_train_data, "credit": credit_train_data, "bank": bank_train_data, "meps": meps_train_data, "tae": tae_train_data, "ricci": ricci_train_data,  "math": math_train_data, "compas": compas_train_data}
-data_test = {"census":census_test_data, "credit": credit_test_data, "bank": bank_test_data, "meps": meps_test_data, "tae": tae_test_data, "ricci": ricci_test_data, "math": math_test_data, "compas": compas_test_data}
-data_val = {"census":census_val_data, "credit": credit_val_data, "bank": bank_val_data, "meps":meps_val_data, "tae": tae_val_data, "ricci": ricci_val_data,  "math": math_val_data, "compas": compas_val_data}
+data = {"census":census_train_data, "credit": credit_train_data, "bank": bank_train_data, "meps": meps_train_data, "tae": tae_train_data, "ricci": ricci_train_data, "compas": compas_train_data, "oulad": oulad_train_data}
+data_test = {"census":census_test_data, "credit": credit_test_data, "bank": bank_test_data, "meps": meps_test_data, "tae": tae_test_data, "ricci": ricci_test_data, "compas": compas_test_data, "oulad": oulad_test_data}
+data_val = {"census":census_val_data, "credit": credit_val_data, "bank": bank_val_data, "meps":meps_val_data, "tae": tae_val_data, "ricci": ricci_val_data, "compas": compas_val_data, "oulad": oulad_val_data}
 
 
 model = torch.load("./model/{}/{}_mlp.pth".format(dataset, dataset)).to(device)  
@@ -82,10 +60,10 @@ X_val, Y_val, input_shape, nb_classes = data_val[dataset]()
 
 
 try:
-    to_add = np.load("{}_{}_mlp_{}.npy".format(method, dataset, protected_params[0]))
+    to_add = np.load("./credit/mlp/label_{}.npy".format(method))
     to_add_length = len(to_add)
-    print(to_add_length)
-    to_x = min(1 * len(X_train), to_add_length)
+    
+    to_x = min(len(X_train), to_add_length)
     
     idx = random.sample(range(0, len(to_add)), to_x) 
 
@@ -115,15 +93,14 @@ try:
     val_loader = DataLoader(val_dataset, batch_size=batch)
     test_loader = DataLoader(test_dataset, batch_size=batch)
     
-    if dataset == 'credit' or dataset == 'bank' or dataset == 'compas' or dataset == 'ricci':
-
+    if dataset == 'credit' or dataset == 'bank' or dataset == 'compas' or dataset == 'ricci' or dataset == 'oulad':
     #bank credit compas ricci
         optimizer = torch.optim.AdamW(
             model.parameters(),
             lr=1e-4,
             weight_decay=1e-5,
-        )   
-    #meps census 
+        )    
+    #meps census
     else:
         optimizer = torch.optim.SGD(
             model.parameters(),
@@ -139,16 +116,28 @@ try:
     best_model_state = None
 
     def cal_auc():
-        prob_all = []
-        label_all = []
-        model.eval()
-        for i, (data,label) in enumerate(test_loader):
-            prob = model(data) 
-            prob_all.extend(prob[:,1].detach().cpu().numpy()) 
-            label_all.extend(label.cpu())
-
-
-        return roc_auc_score(label_all,prob_all)
+        if args.task_type == 'binclass':
+            prob_all = []
+            label_all = []
+            model.eval()
+            for i, (data,label) in enumerate(test_loader):
+                prob = model(data) 
+                prob_all.extend(prob[:,1].detach().cpu().numpy()) 
+                label_all.extend(label.cpu())
+            return roc_auc_score(label_all,prob_all)
+        else:
+            prob_all = []
+            label_all = []
+            model.eval()
+            softmax = torch.nn.Softmax(dim=1)
+            with torch.no_grad():
+                for i, (data, label) in enumerate(test_loader):
+                    prob = model(data)
+                    prob_all.append(softmax(prob).detach().cpu().numpy())
+                    label_all.extend(label.cpu().numpy())
+            prob_all = np.concatenate(prob_all, axis=0)
+            label_all = np.array(label_all)
+            return roc_auc_score(label_all, prob_all, multi_class='ovr')
     #print(cal_auc())
 
     is_modified = 0
@@ -173,13 +162,15 @@ try:
         model.eval()
         count = 0
         correct = 0
+        to_val = X_test
+        to_val_label = Y_test
         with torch.no_grad():
-            for i in range(len(X_val)):
-                this_train = X_val[i].tolist()
-                result =  check_for_error_condition(this_train, protected_params[0], array_length)
+            for i in range(len(to_val)):
+                this_train = to_val[i].tolist()
+                result =  mlp_check_for_error_condition(model, this_train, protected_params, low_bound, high_bound, 0, [], device, "")
                 if result:
                     count += 1
-                this_train, this_label = np.array([X_val[i]]), np.array([Y_val[i]])
+                this_train, this_label = np.array([to_val[i]]), np.array([to_val_label[i]])
                 this_train, this_label = torch.tensor(this_train, dtype=torch.float).to(device), torch.tensor(this_label, dtype=torch.long).to(device)
                 #print(this_train)
                 output = model(this_train)
@@ -217,7 +208,7 @@ try:
         if is_modified == patience:
             break
             
-    model.load_state_dict(best_state)    
+    model.load_state_dict(best_state)   
     model.eval()  
 
     count = 0
@@ -225,7 +216,7 @@ try:
     with torch.no_grad():
         for i in range(len(X_test)):
             this_train = X_test[i].tolist()
-            result =  check_for_error_condition(this_train, protected_params[0], array_length)
+            result =  mlp_check_for_error_condition(model, this_train, protected_params, low_bound, high_bound, 0, [], device, "")
             if result:
                 count += 1
             this_train, this_label = np.array([X_test[i]]), np.array(Y_test[i])
@@ -240,5 +231,31 @@ try:
     this_write = pd.DataFrame({'dataset': dataset, 'struct': 'mlp', 'acc': correct / len(X_test), 'if': count / len(X_test), 'auc': cal_auc()}, index=[0])
     this_data = pd.concat([to_write,this_write]) 
     this_data.to_csv('{}.csv'.format(method), index=False) 
+    
+    
+    """ to_test = np.array([])
+    for i in list(set(all_method) - set([method])):
+        try:
+            to_add_compare = np.load("./oulad_data/mlp/label_{}.npy".format(i))
+            a_tuples = set(map(tuple, to_test))
+            b_tuples = set(map(tuple, to_add_compare))
+            union_tuples = a_tuples.union(b_tuples)
+            to_test = np.array(list(union_tuples))
+            #print(to_test)
+        except FileNotFoundError:
+            print('no file')  
+            
+    this_count = 0
+    with torch.no_grad():
+        for i in range(len(to_test)):
+            this_train = to_test[i][:-1]
+            result = mlp_check_for_error_condition(model, this_train, protected_params, low_bound, high_bound, 0, [], device, "")
+            if result:
+                this_count += 1
+                
+    to_write = pd.read_csv('{}_general.csv'.format(method))
+    this_write = pd.DataFrame({'dataset': dataset, 'struct': 'mlp',  'robust': this_count / len(to_test)}, index=[0])
+    this_data = pd.concat([to_write,this_write]) 
+    this_data.to_csv('{}_general.csv'.format(method), index=False)  """
 except FileNotFoundError:
     print('no file') 

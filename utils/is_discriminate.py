@@ -1,125 +1,101 @@
 import itertools
+import scipy.special
 import torch
 import numpy as np
 import scipy
 
-def mlp_check_for_error_condition(model, t, sens, low_bound, high_bound, k, n_c, device):
+def mlp_check_for_error_condition(model, t, sens, low_bound, high_bound, k, n_c, device, task_type):
     combinations = list(itertools.product(*[range(low_bound[i], high_bound[i]) for i in range(len(sens))]))
-    to_check = []
-    for combo in combinations:
-        temp = t.copy()
-        for idx, sens_attr in enumerate(sens):
-            temp[sens_attr] = combo[idx]
-        to_check.append(temp)
-    result = model(torch.tensor(np.vstack(to_check), dtype=torch.float).to(device))
-    result = result.argmax(dim=1, keepdim=True).cpu()
-    if len(np.unique(result)) != 1:
-        return True
-    return False
-    
-def mlp_check_for_error_condition_rg(model, t, sens, low_bound, high_bound, k, n_c, device):
+    to_check = np.tile(t, (len(combinations), 1))
+    for idx, sens_attr in enumerate(sens):
+        column_values = [combo[idx] for combo in combinations]
+        to_check[:, sens_attr] = column_values
+    to_check_tensor = torch.tensor(to_check, dtype=torch.float).to(device)
+    with torch.no_grad():
+        result = model(to_check_tensor)
+    result = result.argmax(dim=1, keepdim=True).cpu().numpy()
+    return len(np.unique(result)) != 1
+
+def mlp_check_for_error_condition_rg(model, t, sens, low_bound, high_bound, k, n_c, device, task_type):
     combinations = list(itertools.product(*[range(low_bound[i], high_bound[i]) for i in range(len(sens))]))
-    to_check = []
-    for combo in combinations:
-        temp = t.copy()
-        for idx, sens_attr in enumerate(sens):
-            temp[sens_attr] = combo[idx]
-        to_check.append(temp)
-    to_check = torch.tensor(np.vstack(to_check), dtype=torch.float).to(device)
-    distances_input = torch.cdist(to_check, to_check, p=2)
-    distances_output = torch.cdist(model(to_check), model(to_check), p=2)
+    to_check = np.tile(t, (len(combinations), 1))
+    for idx, sens_attr in enumerate(sens):
+        column_values = [combo[idx] for combo in combinations]
+        to_check[:, sens_attr] = column_values
+    to_check_tensor = torch.tensor(to_check, dtype=torch.float).to(device)
+    with torch.no_grad():
+        distances_input = torch.cdist(to_check_tensor, to_check_tensor, p=2)
+        result = model(to_check_tensor)
+        distances_output = torch.cdist(result, result, p=2)
+        fairness_check = distances_output <= k * distances_input
+    return len(torch.unique(fairness_check.cpu())) != 1
+
+
+def ml_check_for_error_condition(model, t, sens, low_bound, high_bound, k, n_c, device, task_type):
+    combinations = list(itertools.product(*[range(low_bound[i], high_bound[i]) for i in range(len(sens))]))
+    to_check = np.tile(t, (len(combinations), 1))
+    for idx, sens_attr in enumerate(sens):
+        column_values = [combo[idx] for combo in combinations]
+        to_check[:, sens_attr] = column_values
+    to_check = to_check.astype(int)
+    result = model.predict(np.vstack(to_check))
+    return len(np.unique(result)) != 1
+
+
+def ml_check_for_error_condition_rg(model, t, sens, low_bound, high_bound, k, n_c, device, task_type):
+    combinations = list(itertools.product(*[range(low_bound[i], high_bound[i]) for i in range(len(sens))]))
+    to_check = np.tile(t, (len(combinations), 1))
+    for idx, sens_attr in enumerate(sens):
+        column_values = [combo[idx] for combo in combinations]
+        to_check[:, sens_attr] = column_values
+    to_check_tensor = torch.tensor(to_check, dtype=torch.float).to(device)
+    with torch.no_grad():
+        predictions = model.predict(to_check.astype(int))
+    predictions_tensor = torch.tensor(predictions, dtype=torch.float).to(device)
+    distances_input = torch.cdist(to_check_tensor, to_check_tensor, p=2)
+    distances_output = torch.cdist(predictions_tensor.unsqueeze(1), predictions_tensor.unsqueeze(1), p=2)
     fairness_check = distances_output <= k * distances_input
-    if len(np.unique(fairness_check.cpu())) != 1:
-        return True
-    return False
+    return len(torch.unique(fairness_check.cpu())) != 1
 
-def ml_check_for_error_condition(model, t, sens, low_bound, high_bound, k, n_c, device):
+
+def ft_check_for_error_condition(model, t, sens, low_bound, high_bound, k, n_c, device, task_type):
     combinations = list(itertools.product(*[range(low_bound[i], high_bound[i]) for i in range(len(sens))]))
-    result = []
-    for combo in combinations:
-        temp = t.copy()
-        for idx, sens_attr in enumerate(sens):
-            temp[sens_attr] = combo[idx]
-        result.append(model.predict(np.array(temp).astype(int)))
-    result = np.array(result).astype(float)
-    if len(np.unique(result)) != 1:
-        return True
-    return False
+    to_check = np.tile(t, (len(combinations), 1))
+    for idx, sens_attr in enumerate(sens):
+        column_values = [combo[idx] for combo in combinations]
+        to_check[:, sens_attr] = column_values
+    cont_indices = [j for j in range(len(n_c)) if n_c[j] == 1]
+    cat_indices = [j for j in range(len(n_c)) if n_c[j] != 1]
+    this_cont = to_check[:, cont_indices]
+    this_cat = to_check[:, cat_indices]
+    this_cont_tensor = torch.tensor(this_cont, dtype=torch.int64).to(device)
+    this_cat_tensor = torch.tensor(this_cat, dtype=torch.int64).to(device)
+    with torch.no_grad():
+        result_tensor = model(this_cont_tensor, this_cat_tensor)
+    result = result_tensor.detach().cpu().numpy()
+    if task_type == 'binclass':
+        result = np.round(scipy.special.expit(result))
+    else:
+        result = np.argmax(result, axis=1)
+    return len(np.unique(result)) != 1
 
-def ml_check_for_error_condition_rg(model, t, sens, low_bound, high_bound, k, n_c, device):
+
+def ft_check_for_error_condition_rg(model, t, sens, low_bound, high_bound, k, n_c, device, task_type):
     combinations = list(itertools.product(*[range(low_bound[i], high_bound[i]) for i in range(len(sens))]))
-    to_check = []
-    res = []
-    for combo in combinations:
-        temp = t.copy()
-        for idx, sens_attr in enumerate(sens):
-            temp[sens_attr] = combo[idx]
-        to_check.append(temp)
-        res.append([model.predict(np.array(temp).astype(int))])
-    to_check = np.array(to_check).astype(int)
-    res = np.array(res).astype(float)
-    distances_input = torch.cdist(torch.tensor(to_check, dtype=torch.float), torch.tensor(to_check, dtype=torch.float), p=2)
-    distances_output = torch.cdist(torch.tensor(res, dtype=torch.float), torch.tensor(res, dtype=torch.float), p=2)
-    fairness_check = distances_output <= k * distances_input
-
-    if len(np.unique(fairness_check.cpu())) != 1:
-        return True
-    return False
-
-def ft_check_for_error_condition(model, t, sens, low_bound, high_bound, k, n_c, device):
-    combinations = list(itertools.product(*[range(low_bound[i], high_bound[i]) for i in range(len(sens))]))
-    to_check = []
-    for combo in combinations:
-        temp = t.copy()
-        for idx, sens_attr in enumerate(sens):
-            temp[sens_attr] = combo[idx]
-        to_check.append(temp)
-    this_cont = []
-    this_cat = []
-    for i in to_check:
-        temp_cont = []
-        temp_cat = []
-        for j in range(len(i)):
-            if n_c[j] == 1:
-                temp_cont.append(i[j])
-            else:
-                temp_cat.append(i[j])
-        this_cont.append(temp_cont)
-        this_cat.append(temp_cat)
-    this_cont = torch.Tensor(this_cont).to(torch.int64).to(device)
-    this_cat = torch.Tensor(this_cat).to(torch.int64).to(device)
-    result = model(this_cont, this_cat).detach().cpu().numpy()
-    result = np.round(scipy.special.expit(result))
-    if len(np.unique(result)) != 1:
-        return True
-    return False
-
-def ft_check_for_error_condition_rg(model, t, sens, low_bound, high_bound, k, n_c, device):
-    combinations = list(itertools.product(*[range(low_bound[i], high_bound[i]) for i in range(len(sens))]))
-    to_check = []
-    for combo in combinations:
-        temp = t.copy()
-        for idx, sens_attr in enumerate(sens):
-            temp[sens_attr] = combo[idx]
-        to_check.append(temp)
-    this_cont = []
-    this_cat = []
-    for i in to_check:
-        temp_cont = []
-        temp_cat = []
-        for j in range(len(i)):
-            if n_c[j] == 1:
-                temp_cont.append(i[j])
-            else:
-                temp_cat.append(i[j])
-        this_cont.append(temp_cont)
-        this_cat.append(temp_cat)
-    to_check = torch.tensor(np.vstack(to_check), dtype=torch.float).to(device)
-    this_cont = torch.Tensor(this_cont).to(torch.int64).to(device)
-    this_cat = torch.Tensor(this_cat).to(torch.int64).to(device)
-    distances_input = torch.cdist(to_check, to_check, p=2)
-    distances_output = torch.cdist(model(this_cont, this_cat), model(this_cont, this_cat), p=2)
-    fairness_check = distances_output <= k * distances_input
-    if len(np.unique(fairness_check.cpu())) != 1:
-        return True
-    return False
+    to_check = np.tile(t, (len(combinations), 1))
+    for idx, sens_attr in enumerate(sens):
+        column_values = [combo[idx] for combo in combinations]
+        to_check[:, sens_attr] = column_values
+    to_check_tensor = torch.tensor(np.vstack(to_check), dtype=torch.float).to(device)
+    cont_indices = [j for j in range(len(n_c)) if n_c[j] == 1]
+    cat_indices = [j for j in range(len(n_c)) if n_c[j] != 1]
+    this_cont = to_check[:, cont_indices]
+    this_cat = to_check[:, cat_indices]
+    this_cont_tensor = torch.tensor(this_cont, dtype=torch.int64).to(device)
+    this_cat_tensor = torch.tensor(this_cat, dtype=torch.int64).to(device)
+    with torch.no_grad():
+        distances_input = torch.cdist(to_check_tensor, to_check_tensor, p=2)
+        result = model(this_cont_tensor, this_cat_tensor)
+        distances_output = torch.cdist(result, result, p=2)
+        fairness_check = distances_output <= k * distances_input
+    return len(torch.unique(fairness_check.cpu())) != 1 

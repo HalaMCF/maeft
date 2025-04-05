@@ -1,24 +1,24 @@
 ## File Structure
 
-./datasets: processed and split datasets
+datasets includes the processed and split datasets
 
-./ensemble: major voting models to label the generated IDIs
+ensemble includes the major voting models (extract ensemble.zip) to label the generated IDIs, and the code for training these models
 
-./maeft: the environment of MAEFT
+maeft includes the environment of MAEFT. The maximum number of tests (denoted as to_divide) is hard coded in the ./maeft/env/environment.py line 58-61.
 
-./maeft_data: scripts used to process datasets and to read data
+maeft_data includes scripts used to process datasets and to read data
 
-./model: model under test
+model includes models under test used in the experiment.
 
-./retrain: code for retraining
+retrain includes codes for retraining. 
 
-./train: code for training
+train includes codes for training a MLP/CatBoost/FT-Transformer model.
 
-./utils: config of datasets
+utils includes configs of datasets and scripts used to determine whether the generated sample is discriminate or not. 
 
 ## Python Version
 
-- python 3.8.18(preferred)
+- python 3.8.18 (preferred)
 
 ## Install Requested Python Packages
 
@@ -26,9 +26,32 @@
 
 ## Testing
 
-Set the params in the argparse:
+Here are the sensitive indices for 10 datasets we used to evaluate our tool:
 
-python maeft.py (for datasets excluded Ricci and Tae)
+Census(Adult): 0 for age, 7 for race, 8 for sex
+Credit: 8 for sex, 12 for age
+Bank: 0 for age
+Meps: 1 for age, 2 for sex, 3 for race
+Ricci: 3 for race
+Tae: 0 for whether_is_native_or_not
+Math & Por: 1 for sex, 2 for age
+COMPAS: 3 for race
+Oulad: 2 for sex
 
-python maeft_small.py (for Ricci and Tae)
 
+
+Set the params in the argparse (RQ1):
+
+`python maeft.py --dataset oulad --model_struct ft --task_type multiclass --d_out 3 --sensitive 2 (for datasets excluded Ricci and Tae)`
+
+`python maeft.py --dataset math --model_struct ft --task_type regression --d_out 1 --sensitive 2 (for regression tasks)`
+
+`python maeft_small.py --dataset tae --model_struct ft --task_type binclass --d_out 1 --sensitive 0 (for Ricci and Tae)`
+
+Note: d_out is a parameter of FT-Transformer(ft), it is only related to the output dimension of ft.
+
+## Evaluation
+
+To calculate CDE, PCC and Pα (RQ3), please refer to https://github.com/amazon-science/tabsyn
+
+To calculate IFs (RQ4), `python retrain_mlp.py` (retrain_mlp is in ./retrain folder)

@@ -1,11 +1,9 @@
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score
-from catboost import CatBoostClassifier, Pool, CatBoostRegressor
+from catboost import CatBoostClassifier, Pool
 import optuna
 from sklearn.metrics import accuracy_score
 
 def objective(trial):
-    to_train = "compas"
+    to_train = "oulad"
     
     if to_train == "census":
         this_cat_features = [1, 3, 4, 5, 6, 7, 8 , 12]
@@ -21,6 +19,8 @@ def objective(trial):
         this_cat_features = [0, 3]
     elif to_train == "compas":
         this_cat_features = [0, 2, 3, 10, 11, 12, 13, 14, 15]
+    elif to_train == 'oulad':
+        this_cat_features = [0, 1, 2, 3, 4, 5, 6, 8, 9]
 
 
     

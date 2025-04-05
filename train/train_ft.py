@@ -10,8 +10,9 @@ from maeft_data.meps import meps_train_data, meps_val_data, meps_test_data
 from maeft_data.tae import tae_train_data, tae_val_data, tae_test_data
 from maeft_data.ricci import ricci_train_data, ricci_val_data, ricci_test_data
 from maeft_data.compas import compas_train_data, compas_val_data, compas_test_data
+from maeft_data.oulad import oulad_train_data, oulad_val_data, oulad_test_data
 from sklearn.metrics import accuracy_score
-from utils.config import census, credit, bank, meps, ricci, tae, compas
+from utils.config import census, credit, bank, meps, ricci, tae, compas, oulad
 import numpy as np
 import delu
 import scipy
@@ -21,13 +22,13 @@ from torch import Tensor
 from typing import Dict
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-data = {"census":census_train_data, "credit": credit_train_data, "bank": bank_train_data, "meps": meps_train_data, "tae": tae_train_data, "ricci": ricci_train_data, "compas": compas_train_data}
-data_test = {"census":census_test_data, "credit": credit_test_data, "bank": bank_test_data, "meps": meps_test_data, "tae": tae_test_data, "ricci": ricci_test_data, "compas": compas_test_data}
-data_val = {"census":census_val_data, "credit": credit_val_data, "bank": bank_val_data, "meps":meps_val_data, "tae": tae_val_data, "ricci": ricci_val_data, "compas": compas_val_data}
-data_config = {"census": census, "credit": credit, "bank": bank, "meps": meps, "ricci": ricci, "tae": tae, "compas": compas}
+data = {"census":census_train_data, "credit": credit_train_data, "bank": bank_train_data, "meps": meps_train_data, "tae": tae_train_data, "ricci": ricci_train_data, "compas": compas_train_data, "oulad": oulad_train_data}
+data_test = {"census":census_test_data, "credit": credit_test_data, "bank": bank_test_data, "meps": meps_test_data, "tae": tae_test_data, "ricci": ricci_test_data, "compas": compas_test_data, "oulad": oulad_test_data}
+data_val = {"census":census_val_data, "credit": credit_val_data, "bank": bank_val_data, "meps":meps_val_data, "tae": tae_val_data, "ricci": ricci_val_data, "compas": compas_val_data, "oulad": oulad_val_data}
+data_config = {"census": census, "credit": credit, "bank": bank, "meps": meps, "ricci": ricci, "tae": tae, "compas": compas, "oulad": oulad}
 
-dataset = "ricci"
-task_type = "binclass"
+dataset = "oulad"
+task_type = "multiclass"
 this_config = data_config[dataset].input_bounds
 
 if dataset == "census":
@@ -42,6 +43,8 @@ elif dataset == "ricci" or dataset == "tae":
     n_c = [0, 1, 1, 0, 1]
 elif dataset == "compas":
     n_c = [0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0]
+elif dataset == "oulad":
+    n_c = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1]
 
 
 X_train, Y_train, input_shape, nb_classes = data[dataset]()
@@ -188,7 +191,7 @@ def evaluate(part: str) -> float:
 n_epochs = 300
 patience = 40
 
-batch_size = 512
+batch_size = 128
 epoch_size = math.ceil(len(X_train) / batch_size)
 timer = delu.tools.Timer()
 early_stopping = delu.tools.EarlyStopping(patience, mode="max")
