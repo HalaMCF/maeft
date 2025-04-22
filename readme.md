@@ -50,6 +50,36 @@ Set the params in the argparse (RQ1):
 
 Note: d_out is a parameter of FT-Transformer(ft), it is only related to the output dimension of ft.
 
+
+
+Set the params in the argparse (RQ2):
+
+Note: Need to fill in the folder where the file is located by yourself.
+
+line 40 for retrain_cat_rg.py
+
+line 56 for retrain_cat.py
+
+line 41 for retrain_ft_rg.py
+
+line 58 for retrain_ft.py
+
+line 47 for retrain_mlp_rg.py
+
+line 63 for retrain_mlp.py
+
+`python retrain_mlp.py --dataset oulad --method maeft --task_type multiclass --sensitive 2 (for MLP models and classification tasks)`
+
+`python retrain_mlp_rg.py --dataset math --method maeft --sensitive 2 (for MLP models and regression tasks)`
+
+
+
+Set the params in the argparse (RQ5)
+
+`python maeft.py --dataset census --model_struct ft --task_type binclass --d_out 1 --sensitive 0,7,8 `
+
+`python maeft.py --dataset math --model_struct ft --task_type regression --d_out 1 --sensitive 1,2 `
+
 ## Evaluation
 
 To calculate CDE, PCC and Pα (RQ3), please refer to https://github.com/amazon-science/tabsyn

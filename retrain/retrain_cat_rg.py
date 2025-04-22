@@ -37,7 +37,7 @@ def objective(trial):
 
     data_train = []
     label_train = []
-    to_add = np.load("{}.npy".format(""))
+    to_add = np.load("xxxxx.npy")
     to_add_length = len(to_add)
     to_x = min(1 * len(X_train), to_add_length)
     idx = random.sample(range(0, len(to_add)), to_x) 

@@ -44,7 +44,7 @@ X_test, Y_test, input_shape, nb_classes = data_test[dataset]()
 X_val, Y_val, input_shape, nb_classes = data_val[dataset]()
 
 try:
-    to_add = np.load("./multi/{}/mlp/label_{}.npy".format(dataset, method))
+    to_add = np.load("xxxx.npy")
     to_add_length = len(to_add)
 
     to_x = min(1 * len(X_train), to_add_length)

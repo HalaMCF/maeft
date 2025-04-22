@@ -55,7 +55,7 @@ low_bound = [to_check_config.input_bounds[attr][0] for attr in protected_params]
 high_bound = [to_check_config.input_bounds[attr][1] + 1 for attr in protected_params]
 
 try:
-    to_add = np.load("./oulad_data/ft/label_{}.npy".format(method))
+    to_add = np.load("xxxxx.npy")
 
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
